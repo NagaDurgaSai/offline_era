@@ -1,0 +1,24 @@
+name: Windows Build
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: stable
+
+      - run: flutter pub get
+      - run: flutter config --enable-windows-desktop
+      - run: flutter build windows
+
+      - uses: actions/upload-artifact@v3
+        with:
+          name: offline_era_windows
+          path: build/windows/x64/runner/Release/
