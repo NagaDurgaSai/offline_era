@@ -7,6 +7,9 @@ jobs:
   build:
     runs-on: windows-latest
 
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
     steps:
       - uses: actions/checkout@v4
 
@@ -14,6 +17,7 @@ jobs:
         with:
           flutter-version: stable
 
+      - run: flutter doctor
       - run: flutter pub get
       - run: flutter config --enable-windows-desktop
       - run: flutter build windows
