@@ -6,7 +6,7 @@ import '../models/device.dart';
 class DiscoveryService {
   static const int discoveryPort = 45678;
   static const int chatPort = 45679;
-  static const Duration broadcastInterval = Duration(seconds: 3);
+  static const Duration broadcastInterval = Duration(seconds: 1);
   static const Duration deviceTimeout = Duration(seconds: 12);
 
   RawDatagramSocket? _socket;
