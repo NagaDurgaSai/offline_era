@@ -1,0 +1,29 @@
+name: offline_era
+description: P2P LAN messenger and clipboard — no internet, no cloud.
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.0.0
+  flutter: ">=3.10.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  shared_preferences: ^2.2.2
+  device_info_plus: ^9.1.0
+  google_fonts: ^6.1.0
+  provider: ^6.1.1
+  network_info_plus: ^5.0.0
+  flutter_highlight: ^0.7.0
+  file_picker: ^8.0.0
+  flutter_local_notifications: ^18.0.0
+  path_provider: ^2.1.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
