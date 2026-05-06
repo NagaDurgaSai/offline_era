@@ -8,7 +8,7 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - uses: subosito/flutter-action@v2
         with:
@@ -18,7 +18,7 @@ jobs:
       - run: flutter config --enable-windows-desktop
       - run: flutter build windows
 
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
           name: offline_era_windows
           path: build/windows/x64/runner/Release/
