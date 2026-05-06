@@ -1,13 +1,17 @@
 import 'dart:async';
+import 'package:desktop_drop/desktop_drop.dart';
+import 'package:desktop_drop/desktop_drop.dart';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_highlight/flutter_highlight.dart';
 import 'package:flutter_highlight/themes/atom-one-dark.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:open_filex/open_filex.dart';
+import 'package:share_plus/share_plus.dart' show Share, XFile;
 import 'package:provider/provider.dart';
 import '../models/device.dart';
 import '../models/message.dart';
@@ -44,7 +48,10 @@ class _ChatScreenState extends State<ChatScreen>
     super.initState();
     widget.chatService.isInChat = true;
     _tabController = TabController(length: 2, vsync: this);
-    _messages = List.from(widget.chatService.historyFor(widget.device.ip));
+    _messages = [];
+    widget.chatService.historyFor(widget.device.ip).then((msgs) {
+      if (mounted) setState(() => _messages = List.from(msgs));
+    });
 
     _msgSub = widget.chatService.messageStream.listen((msg) {
       if (msg.senderIp == widget.device.ip || msg.isMe) {
@@ -182,12 +189,32 @@ class _ChatScreenState extends State<ChatScreen>
   }
 
   Future<void> _pickAndSendFile() async {
-    final result = await FilePicker.platform.pickFiles(withData: false);
+    print("DEBUG: opening file picker");
+    final result = await FilePicker.platform.pickFiles(withData: true);
+    print("DEBUG: picker result = \${result?.files.length} files");
     if (result == null || result.files.isEmpty) return;
     final pf = result.files.first;
-    if (pf.path == null) return;
-    final bytes = await File(pf.path!).readAsBytes();
+    print("DEBUG: file name=\${pf.name} path=\${pf.path} bytes=\${pf.bytes?.length}");
+    Uint8List? bytes;
+    if (pf.bytes != null) {
+      bytes = pf.bytes!;
+      print("DEBUG: got bytes from picker directly: \${bytes.length}");
+    } else if (pf.path != null) {
+      print("DEBUG: reading from path \${pf.path}");
+      try {
+        bytes = await File(pf.path!).readAsBytes();
+        print("DEBUG: read \${bytes.length} bytes from path");
+      } catch (e) {
+        print("DEBUG: error reading file: \$e");
+      }
+    }
+    if (bytes == null) {
+      print("DEBUG: bytes is null, aborting");
+      return;
+    }
+    print("DEBUG: sending file \${pf.name} \${bytes.length} bytes");
     await widget.chatService.sendFile(widget.device, pf.name, bytes);
+    print("DEBUG: sendFile done");
   }
 
   Future<void> _sendFileFromPath(String path) async {
@@ -195,6 +222,36 @@ class _ChatScreenState extends State<ChatScreen>
     final bytes = await file.readAsBytes();
     final name = path.split(Platform.pathSeparator).last;
     await widget.chatService.sendFile(widget.device, name, bytes);
+  }
+
+  Future<void> _saveFile(ChatMessage msg) async {
+    if (msg.fileBytes == null && msg.savedPath == null) return;
+    final bytes = msg.fileBytes ?? await File(msg.savedPath!).readAsBytes();
+    final name = msg.fileName ?? msg.content;
+    final result = await FilePicker.platform.saveFile(
+      dialogTitle: 'save file',
+      fileName: name,
+      bytes: bytes,
+    );
+    if (result != null && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('saved to \$result',
+              style: GoogleFonts.spaceGrotesk(fontSize: 12)),
+          backgroundColor: const Color(0xFF1A1A1A),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  Future<void> _shareFile(ChatMessage msg) async {
+    if (msg.savedPath == null) return;
+    if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
+      await OpenFilex.open(msg.savedPath!);
+    } else {
+      await Share.shareXFiles([XFile(msg.savedPath!)]);
+    }
   }
 
   Future<void> _openFile(ChatMessage msg) async {
@@ -244,128 +301,166 @@ class _ChatScreenState extends State<ChatScreen>
     final isImg = _isImage(name);
     final isPdf = _isPdf(name);
     final size = msg.fileBytes != null ? _formatSize(msg.fileBytes!.length) : '';
+    final isDesktop = Platform.isMacOS || Platform.isWindows || Platform.isLinux;
 
     return Align(
       alignment: msg.isMe ? Alignment.centerRight : Alignment.centerLeft,
-      child: GestureDetector(
-        onTap: () => _openFile(msg),
-        child: Container(
-          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-          constraints: BoxConstraints(
-              maxWidth: MediaQuery.of(context).size.width * 0.78),
-          decoration: BoxDecoration(
-            color: const Color(0xFF1A1A1A),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.white10),
-          ),
-          clipBehavior: Clip.hardEdge,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (isImg && msg.fileBytes != null)
-                ClipRRect(
-                  borderRadius: const BorderRadius.vertical(
-                      top: Radius.circular(12)),
-                  child: Image.memory(
-                    msg.fileBytes!,
-                    fit: BoxFit.cover,
-                    width: double.infinity,
-                    height: 180,
-                    errorBuilder: (_, __, ___) => const SizedBox(),
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 3),
+        width: 200,
+        decoration: BoxDecoration(
+          color: const Color(0xFF1A1A1A),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: Colors.white10),
+        ),
+        clipBehavior: Clip.hardEdge,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // square preview for images
+            if (isImg && msg.fileBytes != null)
+              GestureDetector(
+                onTap: () => _openFile(msg),
+                child: Image.memory(
+                  msg.fileBytes!,
+                  fit: BoxFit.cover,
+                  width: 200,
+                  height: 200,
+                  errorBuilder: (_, __, ___) => const SizedBox(),
+                ),
+              ),
+            // square preview for pdf
+            if (isPdf)
+              GestureDetector(
+                onTap: () => _openFile(msg),
+                child: Container(
+                  width: 200,
+                  height: 200,
+                  color: const Color(0xFFFF6B6B).withOpacity(0.07),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.picture_as_pdf_rounded,
+                          color: Color(0xFFFF6B6B), size: 48),
+                      const SizedBox(height: 8),
+                      Text('PDF',
+                          style: GoogleFonts.spaceGrotesk(
+                              fontSize: 12,
+                              color: const Color(0xFFFF6B6B).withOpacity(0.7),
+                              fontWeight: FontWeight.w600)),
+                    ],
                   ),
                 ),
-              if (isPdf && msg.fileBytes != null)
-                Container(
-                  height: 80,
-                  color: Colors.white.withOpacity(0.04),
-                  child: Center(
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
+              ),
+            // info row
+            Padding(
+              padding: const EdgeInsets.fromLTRB(8, 7, 8, 7),
+              child: Row(
+                children: [
+                  Container(
+                    width: 28,
+                    height: 28,
+                    decoration: BoxDecoration(
+                      color: isImg
+                          ? const Color(0xFFB8FF57).withOpacity(0.1)
+                          : isPdf
+                              ? const Color(0xFFFF6B6B).withOpacity(0.1)
+                              : Colors.white.withOpacity(0.06),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Icon(
+                      isImg
+                          ? Icons.image_rounded
+                          : isPdf
+                              ? Icons.picture_as_pdf_rounded
+                              : Icons.insert_drive_file_rounded,
+                      size: 14,
+                      color: isImg
+                          ? const Color(0xFFB8FF57)
+                          : isPdf
+                              ? const Color(0xFFFF6B6B)
+                              : Colors.white38,
+                    ),
+                  ),
+                  const SizedBox(width: 7),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(Icons.picture_as_pdf_rounded,
-                            color: Color(0xFFFF6B6B), size: 32),
-                        const SizedBox(width: 8),
-                        Text('PDF Document',
-                            style: GoogleFonts.spaceGrotesk(
-                                color: Colors.white54, fontSize: 13)),
+                        Text(
+                          name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.spaceGrotesk(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white,
+                          ),
+                        ),
+                        if (size.isNotEmpty)
+                          Text(size,
+                              style: GoogleFonts.spaceGrotesk(
+                                  fontSize: 10, color: Colors.white38)),
                       ],
                     ),
                   ),
+                  if (msg.isMe)
+                    const Icon(Icons.check_rounded,
+                        size: 12, color: Colors.white24),
+                ],
+              ),
+            ),
+            // action row — shown for received files on all platforms
+            if (!msg.isMe && msg.savedPath != null)
+              Container(
+                decoration: const BoxDecoration(
+                  border: Border(top: BorderSide(color: Colors.white10)),
                 ),
-              Padding(
-                padding: const EdgeInsets.all(12),
                 child: Row(
                   children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFB8FF57).withOpacity(0.12),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Icon(
-                        isImg
-                            ? Icons.image_rounded
-                            : isPdf
-                                ? Icons.picture_as_pdf_rounded
-                                : Icons.insert_drive_file_rounded,
-                        color: isImg
-                            ? const Color(0xFFB8FF57)
-                            : isPdf
-                                ? const Color(0xFFFF6B6B)
-                                : const Color(0xFFB8FF57),
-                        size: 18,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
                     Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(name,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
+                      child: GestureDetector(
+                        onTap: () => _saveFile(msg),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          child: Center(
+                            child: Text(
+                              'save',
                               style: GoogleFonts.spaceGrotesk(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.white)),
-                          if (size.isNotEmpty)
-                            Text(size,
-                                style: GoogleFonts.spaceGrotesk(
-                                    fontSize: 11,
-                                    color: Colors.white38)),
-                        ],
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: const Color(0xFFB8FF57),
+                              ),
+                            ),
+                          ),
+                        ),
                       ),
                     ),
-                    if (!msg.isMe)
-                      const Icon(Icons.download_done_rounded,
-                          color: Color(0xFFB8FF57), size: 16)
-                    else
-                      const Icon(Icons.arrow_upward_rounded,
-                          color: Colors.white24, size: 16),
+                    Container(width: 1, height: 30, color: Colors.white10),
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () => _shareFile(msg),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          child: Center(
+                            child: Text(
+                              isDesktop ? 'open' : 'share',
+                              style: GoogleFonts.spaceGrotesk(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: const Color(0xFFB8FF57),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ),
-              if (msg.savedPath != null)
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFB8FF57).withOpacity(0.08),
-                    border: const Border(
-                        top: BorderSide(color: Colors.white10)),
-                  ),
-                  child: Center(
-                    child: Text(
-                      'tap to open',
-                      style: GoogleFonts.spaceGrotesk(
-                          fontSize: 11,
-                          color: const Color(0xFFB8FF57),
-                          fontWeight: FontWeight.w600),
-                    ),
-                  ),
-                ),
-            ],
-          ),
+          ],
         ),
       ),
     );
@@ -551,30 +646,26 @@ class _ChatScreenState extends State<ChatScreen>
                   itemBuilder: (_, i) => _buildMessage(fileMsgs[i]),
                 ),
         ),
-        // drag and drop zone
-        DragTarget<String>(
-          onWillAcceptWithDetails: (_) {
-            setState(() => _dragOver = true);
-            return true;
-          },
-          onLeave: (_) => setState(() => _dragOver = false),
-          onAcceptWithDetails: (details) {
+        DropTarget(
+          onDragDone: (details) async {
+            for (final file in details.files) {
+              await _sendFileFromPath(file.path);
+            }
             setState(() => _dragOver = false);
-            _sendFileFromPath(details.data);
           },
-          builder: (_, __, ___) => AnimatedContainer(
+          onDragEntered: (_) => setState(() => _dragOver = true),
+          onDragExited: (_) => setState(() => _dragOver = false),
+          child: AnimatedContainer(
             duration: const Duration(milliseconds: 200),
             margin: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-            height: 56,
+            height: 112,
             decoration: BoxDecoration(
               color: _dragOver
                   ? const Color(0xFFB8FF57).withOpacity(0.12)
                   : Colors.white.withOpacity(0.03),
               borderRadius: BorderRadius.circular(10),
               border: Border.all(
-                color: _dragOver
-                    ? const Color(0xFFB8FF57)
-                    : Colors.white12,
+                color: _dragOver ? const Color(0xFFB8FF57) : Colors.white12,
                 width: _dragOver ? 1.5 : 1,
               ),
             ),
@@ -755,9 +846,11 @@ class _ChatScreenState extends State<ChatScreen>
           tabs: const [Tab(text: 'chat'), Tab(text: 'files')],
         ),
       ),
-      body: TabBarView(
-        controller: _tabController,
-        children: [_buildChatTab(), _buildFilesTab()],
+      body: SafeArea(
+        child: TabBarView(
+          controller: _tabController,
+          children: [_buildChatTab(), _buildFilesTab()],
+        ),
       ),
     );
   }
