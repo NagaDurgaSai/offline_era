@@ -1,0 +1,7 @@
+0) nly the nameof the file is being sent not the file fix it 
+1) if im already in the chat i dont need two notifcations and the number of messagess should be shown on the particular chat if thats complext make the notifcationssound turned off if im in the app if the is not activ then only the notifcationssound should come how is that ?, lets say i got 2 messagess from 2 show 2 new messagesson the chat of 2 on homescreenn 
+2) i change the name of device that i named 1 to 3 it changed instantly but didnt update on the devicei i named as 2 and this should not be for these two devices for every device that is on netwrok it should automatically detect the updated name, some come home on device macOS
+3) in the file section above the send a file button  also add a small same and inch tall section where people on mac or windows that can have mouse can just simple drag and drop on mobile its fine 
+4) for only and only PDF and Pictures that are sent a small preview is appriciated and on top i need the view the file that is supported lets say its only pdf and the phone supports opening i can just open directly from there, if its an excel and i dont have so not supported dailgue is fine 
+5) for the app im not getting any notifcations
+6) for the long text format also i need a copy button directly like i have for the code r

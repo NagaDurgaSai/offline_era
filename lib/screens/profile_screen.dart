@@ -4,7 +4,8 @@ import 'package:provider/provider.dart';
 import '../providers/user_provider.dart';
 
 class ProfileScreen extends StatefulWidget {
-  const ProfileScreen({super.key});
+  final Function(String)? onNameChanged;
+  const ProfileScreen({super.key, this.onNameChanged});
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
@@ -17,8 +18,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   void initState() {
     super.initState();
     _controller = TextEditingController(
-      text: context.read<UserProvider>().name,
-    );
+        text: context.read<UserProvider>().name);
   }
 
   @override
@@ -31,6 +31,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final name = _controller.text.trim();
     if (name.isEmpty) return;
     await context.read<UserProvider>().saveName(name);
+    widget.onNameChanged?.call(name);
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -77,10 +78,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   child: Text(
                     user.name.isNotEmpty ? user.name[0].toUpperCase() : '?',
                     style: GoogleFonts.spaceGrotesk(
-                      fontSize: 36,
-                      fontWeight: FontWeight.w800,
-                      color: const Color(0xFFB8FF57),
-                    ),
+                        fontSize: 36,
+                        fontWeight: FontWeight.w800,
+                        color: const Color(0xFFB8FF57)),
                   ),
                 ),
               ),
@@ -106,7 +106,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   borderSide: BorderSide(color: Colors.white24),
                 ),
                 focusedBorder: const UnderlineInputBorder(
-                  borderSide: BorderSide(color: Color(0xFFB8FF57), width: 2),
+                  borderSide:
+                      BorderSide(color: Color(0xFFB8FF57), width: 2),
                 ),
               ),
               onSubmitted: (_) => _save(),

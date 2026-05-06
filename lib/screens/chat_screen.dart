@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_highlight/flutter_highlight.dart';
 import 'package:flutter_highlight/themes/atom-one-dark.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:open_filex/open_filex.dart';
 import 'package:provider/provider.dart';
 import '../models/device.dart';
 import '../models/message.dart';
@@ -36,10 +37,12 @@ class _ChatScreenState extends State<ChatScreen>
   StreamSubscription? _fileSub;
   MessageType _inputMode = MessageType.text;
   late TabController _tabController;
+  bool _dragOver = false;
 
   @override
   void initState() {
     super.initState();
+    widget.chatService.isInChat = true;
     _tabController = TabController(length: 2, vsync: this);
     _messages = List.from(widget.chatService.historyFor(widget.device.ip));
 
@@ -61,6 +64,17 @@ class _ChatScreenState extends State<ChatScreen>
     });
   }
 
+  @override
+  void dispose() {
+    widget.chatService.isInChat = false;
+    _msgSub?.cancel();
+    _fileSub?.cancel();
+    _textController.dispose();
+    _scrollController.dispose();
+    _tabController.dispose();
+    super.dispose();
+  }
+
   void _scrollToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scrollController.hasClients) {
@@ -80,50 +94,42 @@ class _ChatScreenState extends State<ChatScreen>
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (_) => StatefulBuilder(
-        builder: (ctx, setModal) => Padding(
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 36,
-                height: 4,
-                decoration: BoxDecoration(
+      builder: (_) => Padding(
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 36, height: 4,
+              decoration: BoxDecoration(
                   color: Colors.white24,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              const SizedBox(height: 20),
-              Row(
-                children: [
-                  Expanded(
-                    child: _pickerTile(
-                      icon: Icons.text_fields_rounded,
-                      label: 'plain text',
-                      selected: _inputMode == MessageType.text,
-                      onTap: () {
-                        setState(() => _inputMode = MessageType.text);
-                        Navigator.pop(context);
-                      },
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: _pickerTile(
-                      icon: Icons.code_rounded,
-                      label: 'code',
-                      selected: _inputMode == MessageType.code,
-                      onTap: () {
-                        setState(() => _inputMode = MessageType.code);
-                        Navigator.pop(context);
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
+                  borderRadius: BorderRadius.circular(2)),
+            ),
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                Expanded(child: _pickerTile(
+                  icon: Icons.text_fields_rounded,
+                  label: 'plain text',
+                  selected: _inputMode == MessageType.text,
+                  onTap: () {
+                    setState(() => _inputMode = MessageType.text);
+                    Navigator.pop(context);
+                  },
+                )),
+                const SizedBox(width: 12),
+                Expanded(child: _pickerTile(
+                  icon: Icons.code_rounded,
+                  label: 'code',
+                  selected: _inputMode == MessageType.code,
+                  onTap: () {
+                    setState(() => _inputMode = MessageType.code);
+                    Navigator.pop(context);
+                  },
+                )),
+              ],
+            ),
+          ],
         ),
       ),
     );
@@ -151,16 +157,16 @@ class _ChatScreenState extends State<ChatScreen>
         ),
         child: Column(
           children: [
-            Icon(icon,
-                size: 28,
+            Icon(icon, size: 28,
                 color: selected ? const Color(0xFFB8FF57) : Colors.white38),
             const SizedBox(height: 8),
             Text(label,
                 style: GoogleFonts.spaceGrotesk(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
-                    color:
-                        selected ? const Color(0xFFB8FF57) : Colors.white38)),
+                    color: selected
+                        ? const Color(0xFFB8FF57)
+                        : Colors.white38)),
           ],
         ),
       ),
@@ -176,16 +182,43 @@ class _ChatScreenState extends State<ChatScreen>
   }
 
   Future<void> _pickAndSendFile() async {
-    final result = await FilePicker.platform.pickFiles(withData: true);
+    final result = await FilePicker.platform.pickFiles(withData: false);
     if (result == null || result.files.isEmpty) return;
-    final file = result.files.first;
-    if (file.bytes == null) return;
-    await widget.chatService.sendFile(
-      widget.device,
-      file.name,
-      file.bytes!,
-    );
+    final pf = result.files.first;
+    if (pf.path == null) return;
+    final bytes = await File(pf.path!).readAsBytes();
+    await widget.chatService.sendFile(widget.device, pf.name, bytes);
   }
+
+  Future<void> _sendFileFromPath(String path) async {
+    final file = File(path);
+    final bytes = await file.readAsBytes();
+    final name = path.split(Platform.pathSeparator).last;
+    await widget.chatService.sendFile(widget.device, name, bytes);
+  }
+
+  Future<void> _openFile(ChatMessage msg) async {
+    if (msg.savedPath == null) return;
+    final result = await OpenFilex.open(msg.savedPath!);
+    if (result.type == ResultType.noAppToOpen && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('no app found to open this file',
+              style: GoogleFonts.spaceGrotesk()),
+          backgroundColor: const Color(0xFF1A1A1A),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  bool _isImage(String name) {
+    final ext = name.split('.').last.toLowerCase();
+    return ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'].contains(ext);
+  }
+
+  bool _isPdf(String name) =>
+      name.split('.').last.toLowerCase() == 'pdf';
 
   String _formatTime(DateTime t) =>
       '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
@@ -198,64 +231,28 @@ class _ChatScreenState extends State<ChatScreen>
 
   Widget _buildMessage(ChatMessage msg) {
     if (msg.type == MessageType.file) {
-      final size = msg.fileBytes != null
-          ? _formatSize(msg.fileBytes!.length)
-          : '';
-      return Align(
-        alignment: msg.isMe ? Alignment.centerRight : Alignment.centerLeft,
-        child: Container(
-          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          decoration: BoxDecoration(
-            color: const Color(0xFF1A1A1A),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.white10),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFB8FF57).withOpacity(0.12),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Icon(Icons.insert_drive_file_rounded,
-                    color: Color(0xFFB8FF57), size: 20),
-              ),
-              const SizedBox(width: 10),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(msg.content,
-                      style: GoogleFonts.spaceGrotesk(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.white)),
-                  if (size.isNotEmpty)
-                    Text(size,
-                        style: GoogleFonts.spaceGrotesk(
-                            fontSize: 11, color: Colors.white38)),
-                ],
-              ),
-              if (!msg.isMe && msg.fileBytes != null) ...[
-                const SizedBox(width: 12),
-                const Icon(Icons.download_done_rounded,
-                    color: Color(0xFFB8FF57), size: 16),
-              ],
-            ],
-          ),
-        ),
-      );
+      return _buildFileMessage(msg);
     }
-
     if (msg.type == MessageType.code) {
-      return Align(
-        alignment: msg.isMe ? Alignment.centerRight : Alignment.centerLeft,
+      return _buildCodeMessage(msg);
+    }
+    return _buildTextMessage(msg);
+  }
+
+  Widget _buildFileMessage(ChatMessage msg) {
+    final name = msg.fileName ?? msg.content;
+    final isImg = _isImage(name);
+    final isPdf = _isPdf(name);
+    final size = msg.fileBytes != null ? _formatSize(msg.fileBytes!.length) : '';
+
+    return Align(
+      alignment: msg.isMe ? Alignment.centerRight : Alignment.centerLeft,
+      child: GestureDetector(
+        onTap: () => _openFile(msg),
         child: Container(
           margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
           constraints: BoxConstraints(
-              maxWidth: MediaQuery.of(context).size.width * 0.82),
+              maxWidth: MediaQuery.of(context).size.width * 0.78),
           decoration: BoxDecoration(
             color: const Color(0xFF1A1A1A),
             borderRadius: BorderRadius.circular(12),
@@ -265,52 +262,179 @@ class _ChatScreenState extends State<ChatScreen>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                color: Colors.white.withOpacity(0.04),
+              if (isImg && msg.fileBytes != null)
+                ClipRRect(
+                  borderRadius: const BorderRadius.vertical(
+                      top: Radius.circular(12)),
+                  child: Image.memory(
+                    msg.fileBytes!,
+                    fit: BoxFit.cover,
+                    width: double.infinity,
+                    height: 180,
+                    errorBuilder: (_, __, ___) => const SizedBox(),
+                  ),
+                ),
+              if (isPdf && msg.fileBytes != null)
+                Container(
+                  height: 80,
+                  color: Colors.white.withOpacity(0.04),
+                  child: Center(
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.picture_as_pdf_rounded,
+                            color: Color(0xFFFF6B6B), size: 32),
+                        const SizedBox(width: 8),
+                        Text('PDF Document',
+                            style: GoogleFonts.spaceGrotesk(
+                                color: Colors.white54, fontSize: 13)),
+                      ],
+                    ),
+                  ),
+                ),
+              Padding(
+                padding: const EdgeInsets.all(12),
                 child: Row(
                   children: [
-                    const Icon(Icons.code_rounded,
-                        size: 12, color: Color(0xFFB8FF57)),
-                    const SizedBox(width: 6),
-                    Text('code',
-                        style: GoogleFonts.spaceGrotesk(
-                            fontSize: 11,
-                            color: const Color(0xFFB8FF57),
-                            fontWeight: FontWeight.w600)),
-                    const Spacer(),
-                    GestureDetector(
-                      onTap: () =>
-                          Clipboard.setData(ClipboardData(text: msg.content)),
-                      child: const Icon(Icons.copy_rounded,
-                          size: 14, color: Colors.white38),
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFB8FF57).withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Icon(
+                        isImg
+                            ? Icons.image_rounded
+                            : isPdf
+                                ? Icons.picture_as_pdf_rounded
+                                : Icons.insert_drive_file_rounded,
+                        color: isImg
+                            ? const Color(0xFFB8FF57)
+                            : isPdf
+                                ? const Color(0xFFFF6B6B)
+                                : const Color(0xFFB8FF57),
+                        size: 18,
+                      ),
                     ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.spaceGrotesk(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.white)),
+                          if (size.isNotEmpty)
+                            Text(size,
+                                style: GoogleFonts.spaceGrotesk(
+                                    fontSize: 11,
+                                    color: Colors.white38)),
+                        ],
+                      ),
+                    ),
+                    if (!msg.isMe)
+                      const Icon(Icons.download_done_rounded,
+                          color: Color(0xFFB8FF57), size: 16)
+                    else
+                      const Icon(Icons.arrow_upward_rounded,
+                          color: Colors.white24, size: 16),
                   ],
                 ),
               ),
-              HighlightView(
-                msg.content,
-                language: 'dart',
-                theme: atomOneDarkTheme,
-                padding: const EdgeInsets.all(12),
-                textStyle: GoogleFonts.jetBrainsMono(fontSize: 12),
-              ),
+              if (msg.savedPath != null)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFB8FF57).withOpacity(0.08),
+                    border: const Border(
+                        top: BorderSide(color: Colors.white10)),
+                  ),
+                  child: Center(
+                    child: Text(
+                      'tap to open',
+                      style: GoogleFonts.spaceGrotesk(
+                          fontSize: 11,
+                          color: const Color(0xFFB8FF57),
+                          fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ),
             ],
           ),
         ),
-      );
-    }
+      ),
+    );
+  }
 
+  Widget _buildCodeMessage(ChatMessage msg) {
     return Align(
       alignment: msg.isMe ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-        constraints:
-            BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.78),
+        constraints: BoxConstraints(
+            maxWidth: MediaQuery.of(context).size.width * 0.82),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1A1A1A),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.white10),
+        ),
+        clipBehavior: Clip.hardEdge,
         child: Column(
-          crossAxisAlignment:
-              msg.isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              color: Colors.white.withOpacity(0.04),
+              child: Row(
+                children: [
+                  const Icon(Icons.code_rounded,
+                      size: 12, color: Color(0xFFB8FF57)),
+                  const SizedBox(width: 6),
+                  Text('code',
+                      style: GoogleFonts.spaceGrotesk(
+                          fontSize: 11,
+                          color: const Color(0xFFB8FF57),
+                          fontWeight: FontWeight.w600)),
+                  const Spacer(),
+                  GestureDetector(
+                    onTap: () =>
+                        Clipboard.setData(ClipboardData(text: msg.content)),
+                    child: const Icon(Icons.copy_rounded,
+                        size: 14, color: Colors.white38),
+                  ),
+                ],
+              ),
+            ),
+            HighlightView(
+              msg.content,
+              language: 'dart',
+              theme: atomOneDarkTheme,
+              padding: const EdgeInsets.all(12),
+              textStyle: GoogleFonts.jetBrainsMono(fontSize: 12),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTextMessage(ChatMessage msg) {
+    final isLong = msg.content.length > 200;
+    return Align(
+      alignment: msg.isMe ? Alignment.centerRight : Alignment.centerLeft,
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        constraints: BoxConstraints(
+            maxWidth: MediaQuery.of(context).size.width * 0.78),
+        child: Column(
+          crossAxisAlignment: msg.isMe
+              ? CrossAxisAlignment.end
+              : CrossAxisAlignment.start,
           children: [
             Container(
               padding:
@@ -326,10 +450,40 @@ class _ChatScreenState extends State<ChatScreen>
                   bottomRight: Radius.circular(msg.isMe ? 4 : 16),
                 ),
               ),
-              child: Text(msg.content,
-                  style: GoogleFonts.spaceGrotesk(
-                      fontSize: 15,
-                      color: msg.isMe ? Colors.black : Colors.white)),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(msg.content,
+                      style: GoogleFonts.spaceGrotesk(
+                          fontSize: 15,
+                          color:
+                              msg.isMe ? Colors.black : Colors.white)),
+                  if (isLong) ...[
+                    const SizedBox(height: 6),
+                    GestureDetector(
+                      onTap: () => Clipboard.setData(
+                          ClipboardData(text: msg.content)),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.copy_rounded,
+                              size: 12,
+                              color: msg.isMe
+                                  ? Colors.black54
+                                  : Colors.white38),
+                          const SizedBox(width: 4),
+                          Text('copy',
+                              style: GoogleFonts.spaceGrotesk(
+                                  fontSize: 11,
+                                  color: msg.isMe
+                                      ? Colors.black54
+                                      : Colors.white38)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ],
+              ),
             ),
             const SizedBox(height: 2),
             Text(_formatTime(msg.timestamp),
@@ -343,8 +497,8 @@ class _ChatScreenState extends State<ChatScreen>
 
   Widget _buildChatTab() {
     final chatMsgs = _messages
-        .where(
-            (m) => m.type == MessageType.text || m.type == MessageType.code)
+        .where((m) =>
+            m.type == MessageType.text || m.type == MessageType.code)
         .toList();
     return Column(
       children: [
@@ -384,7 +538,7 @@ class _ChatScreenState extends State<ChatScreen>
                           style: GoogleFonts.spaceGrotesk(
                               color: Colors.white24, fontSize: 14)),
                       const SizedBox(height: 4),
-                      Text('tap send to share any file.',
+                      Text('tap send or drag a file.',
                           style: GoogleFonts.spaceGrotesk(
                               color: Colors.white.withOpacity(0.08),
                               fontSize: 12)),
@@ -397,12 +551,59 @@ class _ChatScreenState extends State<ChatScreen>
                   itemBuilder: (_, i) => _buildMessage(fileMsgs[i]),
                 ),
         ),
-        Container(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-          decoration: const BoxDecoration(
-            color: Color(0xFF0F0F0F),
-            border: Border(top: BorderSide(color: Colors.white10)),
+        // drag and drop zone
+        DragTarget<String>(
+          onWillAcceptWithDetails: (_) {
+            setState(() => _dragOver = true);
+            return true;
+          },
+          onLeave: (_) => setState(() => _dragOver = false),
+          onAcceptWithDetails: (details) {
+            setState(() => _dragOver = false);
+            _sendFileFromPath(details.data);
+          },
+          builder: (_, __, ___) => AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            margin: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+            height: 56,
+            decoration: BoxDecoration(
+              color: _dragOver
+                  ? const Color(0xFFB8FF57).withOpacity(0.12)
+                  : Colors.white.withOpacity(0.03),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: _dragOver
+                    ? const Color(0xFFB8FF57)
+                    : Colors.white12,
+                width: _dragOver ? 1.5 : 1,
+              ),
+            ),
+            child: Center(
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.file_upload_outlined,
+                      size: 16,
+                      color: _dragOver
+                          ? const Color(0xFFB8FF57)
+                          : Colors.white24),
+                  const SizedBox(width: 8),
+                  Text(
+                    _dragOver ? 'drop to send' : 'drag file here',
+                    style: GoogleFonts.spaceGrotesk(
+                        fontSize: 12,
+                        color: _dragOver
+                            ? const Color(0xFFB8FF57)
+                            : Colors.white24),
+                  ),
+                ],
+              ),
+            ),
           ),
+        ),
+        Container(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+          color: const Color(0xFF0F0F0F),
           child: GestureDetector(
             onTap: _pickAndSendFile,
             child: Container(
@@ -414,7 +615,8 @@ class _ChatScreenState extends State<ChatScreen>
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(Icons.add_rounded, color: Colors.black, size: 20),
+                  const Icon(Icons.add_rounded,
+                      color: Colors.black, size: 20),
                   const SizedBox(width: 8),
                   Text('send a file',
                       style: GoogleFonts.spaceGrotesk(
@@ -464,8 +666,8 @@ class _ChatScreenState extends State<ChatScreen>
           Expanded(
             child: TextField(
               controller: _textController,
-              style:
-                  GoogleFonts.spaceGrotesk(fontSize: 15, color: Colors.white),
+              style: GoogleFonts.spaceGrotesk(
+                  fontSize: 15, color: Colors.white),
               cursorColor: const Color(0xFFB8FF57),
               onSubmitted: (_) => _send(),
               decoration: InputDecoration(
@@ -480,8 +682,8 @@ class _ChatScreenState extends State<ChatScreen>
                   borderRadius: BorderRadius.circular(24),
                   borderSide: BorderSide.none,
                 ),
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16, vertical: 12),
               ),
             ),
           ),
@@ -505,16 +707,6 @@ class _ChatScreenState extends State<ChatScreen>
   }
 
   @override
-  void dispose() {
-    _msgSub?.cancel();
-    _fileSub?.cancel();
-    _textController.dispose();
-    _scrollController.dispose();
-    _tabController.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF0F0F0F),
@@ -529,8 +721,7 @@ class _ChatScreenState extends State<ChatScreen>
         title: Row(
           children: [
             Container(
-              width: 36,
-              height: 36,
+              width: 36, height: 36,
               decoration: BoxDecoration(
                 color: const Color(0xFFB8FF57).withOpacity(0.15),
                 shape: BoxShape.circle,

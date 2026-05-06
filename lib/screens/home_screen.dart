@@ -118,7 +118,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void _openProfile() {
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => const ProfileScreen()),
+      MaterialPageRoute(builder: (_) => ProfileScreen(onNameChanged: (name) { _chat.updateName(name); _discovery.updateName(name); })),
     );
   }
 

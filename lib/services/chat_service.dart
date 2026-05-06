@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:path_provider/path_provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../models/device.dart';
 import '../models/message.dart';
 import '../services/notification_service.dart';
@@ -21,10 +20,9 @@ class ChatService {
 
   String _myName = '';
   String _myIp = '';
+  bool isInChat = false;
 
-  // In-memory store per peer
   final Map<String, List<ChatMessage>> _history = {};
-
   List<ChatMessage> historyFor(String peerIp) => _history[peerIp] ?? [];
 
   Future<void> startServer(String name, String myIp) async {
@@ -39,11 +37,18 @@ class ChatService {
     _server!.listen(_handleIncoming);
   }
 
+  void updateName(String name) {
+    _myName = name;
+  }
+
   void _handleIncoming(Socket socket) {
     final remoteIp = socket.remoteAddress.address;
     _connections[remoteIp] = socket;
-    final buffer = StringBuffer();
+    _listenOnSocket(socket, remoteIp);
+  }
 
+  void _listenOnSocket(Socket socket, String remoteIp) {
+    final buffer = StringBuffer();
     socket.listen(
       (Uint8List data) {
         buffer.write(utf8.decode(data, allowMalformed: true));
@@ -80,11 +85,19 @@ class ChatService {
             isMe: false,
             fileBytes: fileData,
             fileName: fileName,
+            savedPath: savedPath,
           );
           _history.putIfAbsent(remoteIp, () => []).add(msg);
           _fileController.add(msg);
-          NotificationService.showFile(json['senderName'], fileName);
+          if (!isInChat) {
+            NotificationService.showFile(json['senderName'], fileName);
+          }
         });
+        return;
+      }
+
+      if (json['type'] == 'name_update') {
+        // handled by discovery, ignore here
         return;
       }
 
@@ -93,10 +106,12 @@ class ChatService {
 
       if (msg.type == MessageType.text || msg.type == MessageType.code) {
         _messageController.add(msg);
-        NotificationService.showMessage(
-          msg.senderName,
-          msg.type == MessageType.code ? '📎 code snippet' : msg.content,
-        );
+        if (!isInChat) {
+          NotificationService.showMessage(
+            msg.senderName,
+            msg.type == MessageType.code ? '📎 code snippet' : msg.content,
+          );
+        }
       } else {
         _fileController.add(msg);
       }
@@ -111,16 +126,14 @@ class ChatService {
       dir = await getDownloadsDirectory() ??
           await getApplicationDocumentsDirectory();
     }
+    if (!await dir.exists()) await dir.create(recursive: true);
     final file = File('${dir.path}/$fileName');
     await file.writeAsBytes(bytes);
     return file.path;
   }
 
   Future<void> sendTo(
-    DiscoveredDevice device,
-    String content,
-    MessageType type,
-  ) async {
+      DiscoveredDevice device, String content, MessageType type) async {
     final socket = await _getOrConnect(device);
     if (socket == null) return;
 
@@ -137,7 +150,7 @@ class ChatService {
 
     try {
       socket.write('${jsonEncode(msg.toJson())}\n');
-      if (type == MessageType.text || type == MessageType.code) {
+      if (msg.type == MessageType.text || msg.type == MessageType.code) {
         _messageController.add(msg);
       } else {
         _fileController.add(msg);
@@ -147,7 +160,8 @@ class ChatService {
     }
   }
 
-  Future<void> sendFile(DiscoveredDevice device, String fileName, Uint8List bytes) async {
+  Future<void> sendFile(
+      DiscoveredDevice device, String fileName, Uint8List bytes) async {
     final socket = await _getOrConnect(device);
     if (socket == null) return;
 
@@ -189,23 +203,7 @@ class ChatService {
       socket = await Socket.connect(device.ip, device.port,
           timeout: const Duration(seconds: 3));
       _connections[device.ip] = socket;
-      final buffer = StringBuffer();
-      socket.listen(
-        (Uint8List data) {
-          buffer.write(utf8.decode(data, allowMalformed: true));
-          final raw = buffer.toString();
-          final lines = raw.split('\n');
-          buffer.clear();
-          for (int i = 0; i < lines.length - 1; i++) {
-            final chunk = lines[i].trim();
-            if (chunk.isEmpty) continue;
-            _handleChunk(chunk, device.ip);
-          }
-          if (lines.last.isNotEmpty) buffer.write(lines.last);
-        },
-        onDone: () => _connections.remove(device.ip),
-        onError: (_) => _connections.remove(device.ip),
-      );
+      _listenOnSocket(socket, device.ip);
       return socket;
     } catch (_) {
       return null;

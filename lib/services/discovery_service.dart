@@ -7,7 +7,7 @@ class DiscoveryService {
   static const int discoveryPort = 45678;
   static const int chatPort = 45679;
   static const Duration broadcastInterval = Duration(seconds: 3);
-  static const Duration deviceTimeout = Duration(seconds: 10);
+  static const Duration deviceTimeout = Duration(seconds: 12);
 
   RawDatagramSocket? _socket;
   Timer? _broadcastTimer;
@@ -42,15 +42,22 @@ class DiscoveryService {
         try {
           final data = jsonDecode(utf8.decode(dg.data));
           final device = DiscoveredDevice.fromJson(data);
-          if (device.ip == _myIp) return; // ignore self
-          _devices[device.id] = device;
+          if (device.ip == _myIp) return;
+          _devices[device.ip] = device;
           _devicesController.add(devices);
         } catch (_) {}
       }
     });
 
-    _broadcastTimer = Timer.periodic(broadcastInterval, (_) => _broadcast());
-    _cleanupTimer = Timer.periodic(deviceTimeout, (_) => _cleanup());
+    _broadcastTimer =
+        Timer.periodic(broadcastInterval, (_) => _broadcast());
+    _cleanupTimer =
+        Timer.periodic(deviceTimeout, (_) => _cleanup());
+    _broadcast();
+  }
+
+  void updateName(String newName) {
+    _myName = newName;
     _broadcast();
   }
 
@@ -62,17 +69,13 @@ class DiscoveryService {
       'port': chatPort,
     });
     final data = utf8.encode(payload);
-    _socket!.send(
-      data,
-      InternetAddress('255.255.255.255'),
-      discoveryPort,
-    );
+    _socket!.send(data, InternetAddress('255.255.255.255'), discoveryPort);
   }
 
   void _cleanup() {
     final now = DateTime.now();
-    _devices.removeWhere((_, d) =>
-        now.difference(d.lastSeen) > deviceTimeout + broadcastInterval);
+    _devices.removeWhere(
+        (_, d) => now.difference(d.lastSeen) > deviceTimeout + broadcastInterval);
     _devicesController.add(devices);
   }
 

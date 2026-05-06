@@ -12,6 +12,7 @@ class ChatMessage {
   final bool isMe;
   final Uint8List? fileBytes;
   final String? fileName;
+  final String? savedPath;
 
   ChatMessage({
     required this.id,
@@ -23,6 +24,7 @@ class ChatMessage {
     required this.isMe,
     this.fileBytes,
     this.fileName,
+    this.savedPath,
   });
 
   Map<String, dynamic> toJson() => {
