@@ -1,7 +1,7 @@
 name: offline_era
 description: P2P LAN messenger and clipboard — no internet, no cloud.
 publish_to: 'none'
-version: 1.0.0+1
+version: 1.2.0+2
 
 environment:
   sdk: ^3.0.0

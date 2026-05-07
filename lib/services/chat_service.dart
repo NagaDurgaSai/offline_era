@@ -89,6 +89,10 @@ class ChatService {
 
   void _handleIncoming(Socket socket) {
     final remoteIp = socket.remoteAddress.address;
+    // close old connection if exists
+    if (_connections.containsKey(remoteIp)) {
+      try { _connections[remoteIp]?.destroy(); } catch (_) {}
+    }
     _connections[remoteIp] = socket;
     _listenOnSocket(socket, remoteIp);
   }

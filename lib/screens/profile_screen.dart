@@ -1,7 +1,9 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../providers/user_provider.dart';
+import '../services/storage_service.dart';
 
 class ProfileScreen extends StatefulWidget {
   final Function(String)? onNameChanged;
@@ -13,18 +15,47 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   late TextEditingController _controller;
+  String _storageUsed = 'calculating...';
 
   @override
   void initState() {
     super.initState();
     _controller = TextEditingController(
         text: context.read<UserProvider>().name);
+    _calculateStorage();
   }
 
   @override
   void dispose() {
     _controller.dispose();
     super.dispose();
+  }
+
+  Future<void> _calculateStorage() async {
+    try {
+      final folder = await StorageService.getAppFolder();
+      int total = 0;
+      await for (final entity in folder.list(recursive: true)) {
+        if (entity is File) {
+          total += await entity.length();
+        }
+      }
+      if (mounted) {
+        setState(() {
+          if (total < 1024) {
+            _storageUsed = '${total}B';
+          } else if (total < 1024 * 1024) {
+            _storageUsed = '${(total / 1024).toStringAsFixed(1)}KB';
+          } else if (total < 1024 * 1024 * 1024) {
+            _storageUsed = '${(total / (1024 * 1024)).toStringAsFixed(1)}MB';
+          } else {
+            _storageUsed = '${(total / (1024 * 1024 * 1024)).toStringAsFixed(2)}GB';
+          }
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _storageUsed = 'unavailable');
+    }
   }
 
   Future<void> _save() async {
@@ -41,6 +72,35 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ),
       );
     }
+  }
+
+  Widget _infoTile(String label, String value, {IconData? icon}) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A1A1A),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.white10),
+      ),
+      child: Row(
+        children: [
+          if (icon != null) ...[
+            Icon(icon, size: 16, color: Colors.white38),
+            const SizedBox(width: 10),
+          ],
+          Text(label,
+              style: GoogleFonts.spaceGrotesk(
+                  fontSize: 13, color: Colors.white38)),
+          const Spacer(),
+          Text(value,
+              style: GoogleFonts.spaceGrotesk(
+                  fontSize: 13,
+                  color: Colors.white70,
+                  fontWeight: FontWeight.w600)),
+        ],
+      ),
+    );
   }
 
   @override
@@ -106,8 +166,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   borderSide: BorderSide(color: Colors.white24),
                 ),
                 focusedBorder: const UnderlineInputBorder(
-                  borderSide:
-                      BorderSide(color: Color(0xFFB8FF57), width: 2),
+                  borderSide: BorderSide(color: Color(0xFFB8FF57), width: 2),
                 ),
               ),
               onSubmitted: (_) => _save(),
@@ -133,6 +192,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
               ),
             ),
+            const SizedBox(height: 32),
+            Text('info',
+                style: GoogleFonts.spaceGrotesk(
+                    fontSize: 13,
+                    color: Colors.white38,
+                    letterSpacing: 0.5)),
+            const SizedBox(height: 8),
+            _infoTile('storage used', _storageUsed,
+                icon: Icons.folder_outlined),
+            _infoTile('version', '1.2.0',
+                icon: Icons.info_outline_rounded),
+            _infoTile('platform',
+                Platform.isMacOS
+                    ? 'macOS'
+                    : Platform.isAndroid
+                        ? 'Android'
+                        : Platform.isWindows
+                            ? 'Windows'
+                            : 'unknown',
+                icon: Icons.devices_rounded),
             const Spacer(),
           ],
         ),

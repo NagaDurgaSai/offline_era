@@ -7,10 +7,10 @@ import '../models/message.dart';
 import '../providers/user_provider.dart';
 import '../services/chat_service.dart';
 import '../services/discovery_service.dart';
+import '../services/database.dart';
 import '../widgets/device_tile.dart';
 import 'chat_screen.dart';
 import 'profile_screen.dart';
-import 'setup_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -21,14 +21,17 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final _discovery = DiscoveryService();
-  final _chat = ChatService();
+  late final ChatService _chat;
   List<DiscoveredDevice> _devices = [];
+  Set<String> _onlineIps = {};
   bool _started = false;
   StreamSubscription? _msgSub;
   StreamSubscription? _fileSub;
+  StreamSubscription? _onlineSub;
 
-  // unread counts per device ip
   final Map<String, int> _unread = {};
+  final Map<String, String> _lastMessage = {};
+  final Map<String, String> _lastMessageTime = {};
   OverlayEntry? _bannerEntry;
 
   @override
@@ -39,27 +42,102 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _start() async {
     final user = context.read<UserProvider>();
+    _chat = ChatService();
     await _chat.startServer(user.name, user.localIp);
-    await _discovery.start(user.name, user.localIp);
+    await _discovery.start(user.name, user.localIp, _chat.db);
+
     _discovery.devicesStream.listen((devices) {
       if (mounted) setState(() => _devices = devices);
     });
 
+    _onlineSub = _discovery.onlineStream.listen((onlineIps) {
+      if (mounted) setState(() => _onlineIps = onlineIps);
+    });
+
+    // load last messages for all known devices
+    for (final device in _devices) {
+      _loadLastMessage(device.ip);
+    }
+
     _msgSub = _chat.messageStream.listen((msg) {
       if (!msg.isMe) {
-        setState(() => _unread[msg.senderIp] = (_unread[msg.senderIp] ?? 0) + 1);
-        _showBanner(msg.senderName, msg.type == MessageType.code ? '📎 code snippet' : msg.content, msg.senderIp);
+        setState(() {
+          _unread[msg.senderIp] = (_unread[msg.senderIp] ?? 0) + 1;
+          _updateLastMessage(msg.senderIp, msg);
+        });
+        _showBanner(msg.senderName,
+            msg.type == MessageType.code ? '📎 code snippet' : msg.content,
+            msg.senderIp);
+      } else {
+        setState(() => _updateLastMessage(msg.senderIp, msg));
       }
     });
 
     _fileSub = _chat.fileStream.listen((msg) {
       if (!msg.isMe) {
-        setState(() => _unread[msg.senderIp] = (_unread[msg.senderIp] ?? 0) + 1);
-        _showBanner(msg.senderName, 'sent a file: ${msg.content}', msg.senderIp);
+        setState(() {
+          _unread[msg.senderIp] = (_unread[msg.senderIp] ?? 0) + 1;
+          _updateLastMessage(msg.senderIp, msg);
+        });
+        _showBanner(msg.senderName, '📁 ${msg.content}', msg.senderIp);
+      } else {
+        setState(() => _updateLastMessage(msg.isMe ? msg.senderIp : msg.senderIp, msg));
       }
     });
 
     if (mounted) setState(() => _started = true);
+
+    // load last messages after devices loaded
+    _discovery.devicesStream.listen((devices) {
+      for (final d in devices) {
+        if (!_lastMessage.containsKey(d.ip)) {
+          _loadLastMessage(d.ip);
+        }
+      }
+    });
+  }
+
+  Future<void> _loadLastMessage(String peerIp) async {
+    final msg = await _chat.db.lastMessageForPeer(peerIp);
+    if (msg != null && mounted) {
+      setState(() {
+        _updateLastMessageFromDb(peerIp, msg);
+      });
+    }
+  }
+
+  void _updateLastMessageFromDb(String peerIp, Message msg) {
+    String preview;
+    if (msg.type == 'file') {
+      preview = '📁 ${msg.content}';
+    } else if (msg.type == 'code') {
+      preview = '📎 code snippet';
+    } else {
+      preview = msg.isMe ? 'you: ${msg.content}' : msg.content;
+    }
+    _lastMessage[peerIp] = preview;
+    _lastMessageTime[peerIp] = _formatTime(DateTime.parse(msg.timestamp));
+  }
+
+  void _updateLastMessage(String peerIp, ChatMessage msg) {
+    String preview;
+    if (msg.type == MessageType.file) {
+      preview = '📁 ${msg.content}';
+    } else if (msg.type == MessageType.code) {
+      preview = '📎 code snippet';
+    } else {
+      preview = msg.isMe ? 'you: ${msg.content}' : msg.content;
+    }
+    _lastMessage[peerIp] = preview;
+    _lastMessageTime[peerIp] = _formatTime(msg.timestamp);
+  }
+
+  String _formatTime(DateTime t) {
+    final now = DateTime.now();
+    if (t.day == now.day) {
+      return '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+    }
+    return '${t.day}/${t.month}';
   }
 
   void _showBanner(String sender, String preview, String senderIp) {
@@ -100,6 +178,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _bannerEntry?.remove();
     _msgSub?.cancel();
     _fileSub?.cancel();
+    _onlineSub?.cancel();
     _discovery.dispose();
     _chat.dispose();
     super.dispose();
@@ -112,13 +191,20 @@ class _HomeScreenState extends State<HomeScreen> {
       MaterialPageRoute(
         builder: (_) => ChatScreen(device: device, chatService: _chat),
       ),
-    );
+    ).then((_) => _loadLastMessage(device.ip));
   }
 
   void _openProfile() {
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => ProfileScreen(onNameChanged: (name) { _chat.updateName(name); _discovery.updateName(name); })),
+      MaterialPageRoute(
+        builder: (_) => ProfileScreen(
+          onNameChanged: (name) {
+            _chat.updateName(name);
+            _discovery.updateName(name);
+          },
+        ),
+      ),
     );
   }
 
@@ -143,8 +229,7 @@ class _HomeScreenState extends State<HomeScreen> {
             onTap: _openProfile,
             child: Container(
               margin: const EdgeInsets.only(right: 16),
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
                 color: Colors.white10,
                 borderRadius: BorderRadius.circular(20),
@@ -171,8 +256,7 @@ class _HomeScreenState extends State<HomeScreen> {
           if (totalUnread > 0)
             Container(
               margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
                 color: const Color(0xFFB8FF57).withOpacity(0.1),
                 borderRadius: BorderRadius.circular(10),
@@ -224,8 +308,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           width: 24,
                           height: 24,
                           child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Color(0xFFB8FF57)),
+                              strokeWidth: 2, color: Color(0xFFB8FF57)),
                         ),
                         const SizedBox(height: 12),
                         Text('scanning network...',
@@ -259,10 +342,12 @@ class _HomeScreenState extends State<HomeScreen> {
                         itemCount: _devices.length,
                         itemBuilder: (_, i) {
                           final device = _devices[i];
-                          final unread = _unread[device.ip] ?? 0;
                           return DeviceTile(
                             device: device,
-                            unreadCount: unread,
+                            unreadCount: _unread[device.ip] ?? 0,
+                            isOnline: _onlineIps.contains(device.ip),
+                            lastMessage: _lastMessage[device.ip],
+                            lastMessageTime: _lastMessageTime[device.ip],
                             onTap: () => _openChat(device),
                           );
                         },
@@ -277,9 +362,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   width: 6,
                   height: 6,
                   decoration: BoxDecoration(
-                    color: _started
-                        ? const Color(0xFFB8FF57)
-                        : Colors.white24,
+                    color: _started ? const Color(0xFFB8FF57) : Colors.white24,
                     shape: BoxShape.circle,
                   ),
                 ),
@@ -353,7 +436,8 @@ class _NotificationBannerState extends State<_NotificationBanner>
             decoration: BoxDecoration(
               color: const Color(0xFF1E1E1E),
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: const Color(0xFFB8FF57).withOpacity(0.3)),
+              border: Border.all(
+                  color: const Color(0xFFB8FF57).withOpacity(0.3)),
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withOpacity(0.4),

@@ -22,12 +22,31 @@ class Messages extends Table {
   Set<Column> get primaryKey => {id};
 }
 
-@DriftDatabase(tables: [Messages])
+class KnownDevices extends Table {
+  TextColumn get ip => text()();
+  TextColumn get name => text()();
+  IntColumn get port => integer()();
+  TextColumn get lastSeen => text()();
+
+  @override
+  Set<Column> get primaryKey => {ip};
+}
+
+@DriftDatabase(tables: [Messages, KnownDevices])
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
+
+  @override
+  MigrationStrategy get migration => MigrationStrategy(
+    onUpgrade: (m, from, to) async {
+      if (from < 2) {
+        await m.createTable(knownDevices);
+      }
+    },
+  );
 
   Future<List<Message>> messagesForPeer(String peerIp) =>
       (select(messages)
@@ -40,6 +59,21 @@ class AppDatabase extends _$AppDatabase {
 
   Future<void> deleteMessagesForPeer(String peerIp) =>
       (delete(messages)..where((m) => m.peerIp.equals(peerIp))).go();
+
+  Future<List<KnownDevice>> getAllKnownDevices() =>
+      select(knownDevices).get();
+
+  Future<void> upsertKnownDevice(KnownDevicesCompanion device) =>
+      into(knownDevices).insertOnConflictUpdate(device);
+
+  Future<Message?> lastMessageForPeer(String peerIp) async {
+    final results = await (select(messages)
+          ..where((m) => m.peerIp.equals(peerIp))
+          ..orderBy([(m) => OrderingTerm.desc(m.timestamp)])
+          ..limit(1))
+        .get();
+    return results.isEmpty ? null : results.first;
+  }
 }
 
 LazyDatabase _openConnection() {

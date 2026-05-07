@@ -512,15 +512,282 @@ class MessagesCompanion extends UpdateCompanion<Message> {
   }
 }
 
+class $KnownDevicesTable extends KnownDevices
+    with TableInfo<$KnownDevicesTable, KnownDevice> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $KnownDevicesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _ipMeta = const VerificationMeta('ip');
+  @override
+  late final GeneratedColumn<String> ip = GeneratedColumn<String>(
+      'ip', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+      'name', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _portMeta = const VerificationMeta('port');
+  @override
+  late final GeneratedColumn<int> port = GeneratedColumn<int>(
+      'port', aliasedName, false,
+      type: DriftSqlType.int, requiredDuringInsert: true);
+  static const VerificationMeta _lastSeenMeta =
+      const VerificationMeta('lastSeen');
+  @override
+  late final GeneratedColumn<String> lastSeen = GeneratedColumn<String>(
+      'last_seen', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  @override
+  List<GeneratedColumn> get $columns => [ip, name, port, lastSeen];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'known_devices';
+  @override
+  VerificationContext validateIntegrity(Insertable<KnownDevice> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('ip')) {
+      context.handle(_ipMeta, ip.isAcceptableOrUnknown(data['ip']!, _ipMeta));
+    } else if (isInserting) {
+      context.missing(_ipMeta);
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+          _nameMeta, name.isAcceptableOrUnknown(data['name']!, _nameMeta));
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('port')) {
+      context.handle(
+          _portMeta, port.isAcceptableOrUnknown(data['port']!, _portMeta));
+    } else if (isInserting) {
+      context.missing(_portMeta);
+    }
+    if (data.containsKey('last_seen')) {
+      context.handle(_lastSeenMeta,
+          lastSeen.isAcceptableOrUnknown(data['last_seen']!, _lastSeenMeta));
+    } else if (isInserting) {
+      context.missing(_lastSeenMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {ip};
+  @override
+  KnownDevice map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return KnownDevice(
+      ip: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}ip'])!,
+      name: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}name'])!,
+      port: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}port'])!,
+      lastSeen: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}last_seen'])!,
+    );
+  }
+
+  @override
+  $KnownDevicesTable createAlias(String alias) {
+    return $KnownDevicesTable(attachedDatabase, alias);
+  }
+}
+
+class KnownDevice extends DataClass implements Insertable<KnownDevice> {
+  final String ip;
+  final String name;
+  final int port;
+  final String lastSeen;
+  const KnownDevice(
+      {required this.ip,
+      required this.name,
+      required this.port,
+      required this.lastSeen});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['ip'] = Variable<String>(ip);
+    map['name'] = Variable<String>(name);
+    map['port'] = Variable<int>(port);
+    map['last_seen'] = Variable<String>(lastSeen);
+    return map;
+  }
+
+  KnownDevicesCompanion toCompanion(bool nullToAbsent) {
+    return KnownDevicesCompanion(
+      ip: Value(ip),
+      name: Value(name),
+      port: Value(port),
+      lastSeen: Value(lastSeen),
+    );
+  }
+
+  factory KnownDevice.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return KnownDevice(
+      ip: serializer.fromJson<String>(json['ip']),
+      name: serializer.fromJson<String>(json['name']),
+      port: serializer.fromJson<int>(json['port']),
+      lastSeen: serializer.fromJson<String>(json['lastSeen']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'ip': serializer.toJson<String>(ip),
+      'name': serializer.toJson<String>(name),
+      'port': serializer.toJson<int>(port),
+      'lastSeen': serializer.toJson<String>(lastSeen),
+    };
+  }
+
+  KnownDevice copyWith(
+          {String? ip, String? name, int? port, String? lastSeen}) =>
+      KnownDevice(
+        ip: ip ?? this.ip,
+        name: name ?? this.name,
+        port: port ?? this.port,
+        lastSeen: lastSeen ?? this.lastSeen,
+      );
+  KnownDevice copyWithCompanion(KnownDevicesCompanion data) {
+    return KnownDevice(
+      ip: data.ip.present ? data.ip.value : this.ip,
+      name: data.name.present ? data.name.value : this.name,
+      port: data.port.present ? data.port.value : this.port,
+      lastSeen: data.lastSeen.present ? data.lastSeen.value : this.lastSeen,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('KnownDevice(')
+          ..write('ip: $ip, ')
+          ..write('name: $name, ')
+          ..write('port: $port, ')
+          ..write('lastSeen: $lastSeen')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(ip, name, port, lastSeen);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is KnownDevice &&
+          other.ip == this.ip &&
+          other.name == this.name &&
+          other.port == this.port &&
+          other.lastSeen == this.lastSeen);
+}
+
+class KnownDevicesCompanion extends UpdateCompanion<KnownDevice> {
+  final Value<String> ip;
+  final Value<String> name;
+  final Value<int> port;
+  final Value<String> lastSeen;
+  final Value<int> rowid;
+  const KnownDevicesCompanion({
+    this.ip = const Value.absent(),
+    this.name = const Value.absent(),
+    this.port = const Value.absent(),
+    this.lastSeen = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  KnownDevicesCompanion.insert({
+    required String ip,
+    required String name,
+    required int port,
+    required String lastSeen,
+    this.rowid = const Value.absent(),
+  })  : ip = Value(ip),
+        name = Value(name),
+        port = Value(port),
+        lastSeen = Value(lastSeen);
+  static Insertable<KnownDevice> custom({
+    Expression<String>? ip,
+    Expression<String>? name,
+    Expression<int>? port,
+    Expression<String>? lastSeen,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (ip != null) 'ip': ip,
+      if (name != null) 'name': name,
+      if (port != null) 'port': port,
+      if (lastSeen != null) 'last_seen': lastSeen,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  KnownDevicesCompanion copyWith(
+      {Value<String>? ip,
+      Value<String>? name,
+      Value<int>? port,
+      Value<String>? lastSeen,
+      Value<int>? rowid}) {
+    return KnownDevicesCompanion(
+      ip: ip ?? this.ip,
+      name: name ?? this.name,
+      port: port ?? this.port,
+      lastSeen: lastSeen ?? this.lastSeen,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (ip.present) {
+      map['ip'] = Variable<String>(ip.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (port.present) {
+      map['port'] = Variable<int>(port.value);
+    }
+    if (lastSeen.present) {
+      map['last_seen'] = Variable<String>(lastSeen.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('KnownDevicesCompanion(')
+          ..write('ip: $ip, ')
+          ..write('name: $name, ')
+          ..write('port: $port, ')
+          ..write('lastSeen: $lastSeen, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
   late final $MessagesTable messages = $MessagesTable(this);
+  late final $KnownDevicesTable knownDevices = $KnownDevicesTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
   @override
-  List<DatabaseSchemaEntity> get allSchemaEntities => [messages];
+  List<DatabaseSchemaEntity> get allSchemaEntities => [messages, knownDevices];
 }
 
 typedef $$MessagesTableCreateCompanionBuilder = MessagesCompanion Function({
@@ -763,10 +1030,170 @@ typedef $$MessagesTableProcessedTableManager = ProcessedTableManager<
     (Message, BaseReferences<_$AppDatabase, $MessagesTable, Message>),
     Message,
     PrefetchHooks Function()>;
+typedef $$KnownDevicesTableCreateCompanionBuilder = KnownDevicesCompanion
+    Function({
+  required String ip,
+  required String name,
+  required int port,
+  required String lastSeen,
+  Value<int> rowid,
+});
+typedef $$KnownDevicesTableUpdateCompanionBuilder = KnownDevicesCompanion
+    Function({
+  Value<String> ip,
+  Value<String> name,
+  Value<int> port,
+  Value<String> lastSeen,
+  Value<int> rowid,
+});
+
+class $$KnownDevicesTableFilterComposer
+    extends Composer<_$AppDatabase, $KnownDevicesTable> {
+  $$KnownDevicesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get ip => $composableBuilder(
+      column: $table.ip, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get name => $composableBuilder(
+      column: $table.name, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get port => $composableBuilder(
+      column: $table.port, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get lastSeen => $composableBuilder(
+      column: $table.lastSeen, builder: (column) => ColumnFilters(column));
+}
+
+class $$KnownDevicesTableOrderingComposer
+    extends Composer<_$AppDatabase, $KnownDevicesTable> {
+  $$KnownDevicesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get ip => $composableBuilder(
+      column: $table.ip, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get name => $composableBuilder(
+      column: $table.name, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get port => $composableBuilder(
+      column: $table.port, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get lastSeen => $composableBuilder(
+      column: $table.lastSeen, builder: (column) => ColumnOrderings(column));
+}
+
+class $$KnownDevicesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $KnownDevicesTable> {
+  $$KnownDevicesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get ip =>
+      $composableBuilder(column: $table.ip, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<int> get port =>
+      $composableBuilder(column: $table.port, builder: (column) => column);
+
+  GeneratedColumn<String> get lastSeen =>
+      $composableBuilder(column: $table.lastSeen, builder: (column) => column);
+}
+
+class $$KnownDevicesTableTableManager extends RootTableManager<
+    _$AppDatabase,
+    $KnownDevicesTable,
+    KnownDevice,
+    $$KnownDevicesTableFilterComposer,
+    $$KnownDevicesTableOrderingComposer,
+    $$KnownDevicesTableAnnotationComposer,
+    $$KnownDevicesTableCreateCompanionBuilder,
+    $$KnownDevicesTableUpdateCompanionBuilder,
+    (
+      KnownDevice,
+      BaseReferences<_$AppDatabase, $KnownDevicesTable, KnownDevice>
+    ),
+    KnownDevice,
+    PrefetchHooks Function()> {
+  $$KnownDevicesTableTableManager(_$AppDatabase db, $KnownDevicesTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$KnownDevicesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$KnownDevicesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$KnownDevicesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<String> ip = const Value.absent(),
+            Value<String> name = const Value.absent(),
+            Value<int> port = const Value.absent(),
+            Value<String> lastSeen = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              KnownDevicesCompanion(
+            ip: ip,
+            name: name,
+            port: port,
+            lastSeen: lastSeen,
+            rowid: rowid,
+          ),
+          createCompanionCallback: ({
+            required String ip,
+            required String name,
+            required int port,
+            required String lastSeen,
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              KnownDevicesCompanion.insert(
+            ip: ip,
+            name: name,
+            port: port,
+            lastSeen: lastSeen,
+            rowid: rowid,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ));
+}
+
+typedef $$KnownDevicesTableProcessedTableManager = ProcessedTableManager<
+    _$AppDatabase,
+    $KnownDevicesTable,
+    KnownDevice,
+    $$KnownDevicesTableFilterComposer,
+    $$KnownDevicesTableOrderingComposer,
+    $$KnownDevicesTableAnnotationComposer,
+    $$KnownDevicesTableCreateCompanionBuilder,
+    $$KnownDevicesTableUpdateCompanionBuilder,
+    (
+      KnownDevice,
+      BaseReferences<_$AppDatabase, $KnownDevicesTable, KnownDevice>
+    ),
+    KnownDevice,
+    PrefetchHooks Function()>;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
   $AppDatabaseManager(this._db);
   $$MessagesTableTableManager get messages =>
       $$MessagesTableTableManager(_db, _db.messages);
+  $$KnownDevicesTableTableManager get knownDevices =>
+      $$KnownDevicesTableTableManager(_db, _db.knownDevices);
 }
