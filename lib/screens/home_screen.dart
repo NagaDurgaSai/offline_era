@@ -44,7 +44,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final user = context.read<UserProvider>();
     _chat = ChatService();
     await _chat.startServer(user.name, user.localIp);
-    await _discovery.start(user.name, user.localIp, _chat.db);
+    await _discovery.start(user.name, user.avatar, user.localIp, _chat.db);
 
     _discovery.devicesStream.listen((devices) {
       if (mounted) setState(() => _devices = devices);
@@ -199,9 +199,10 @@ class _HomeScreenState extends State<HomeScreen> {
       context,
       MaterialPageRoute(
         builder: (_) => ProfileScreen(
-          onNameChanged: (name) {
-            _chat.updateName(name);
-            _discovery.updateName(name);
+          onProfileChanged: () {
+            final user = context.read<UserProvider>();
+            _chat.updateName(user.name);
+            _discovery.updateProfile(user.name, user.avatar);
           },
         ),
       ),
@@ -236,8 +237,9 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.person_rounded,
-                      size: 14, color: Colors.white54),
+                  user.avatar.isNotEmpty
+                      ? Text(user.avatar, style: const TextStyle(fontSize: 14))
+                      : const Icon(Icons.person_rounded, size: 14, color: Colors.white54),
                   const SizedBox(width: 6),
                   Text(user.name,
                       style: GoogleFonts.spaceGrotesk(

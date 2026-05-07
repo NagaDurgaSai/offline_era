@@ -9,7 +9,7 @@ class DiscoveryService {
   static const int discoveryPort = 45678;
   static const int chatPort = 45679;
   static const Duration broadcastInterval = Duration(seconds: 1);
-  static const Duration deviceTimeout = Duration(seconds: 5);
+  static const Duration deviceTimeout = Duration(seconds: 2);
 
   RawDatagramSocket? _socket;
   Timer? _broadcastTimer;
@@ -33,11 +33,13 @@ class DiscoveryService {
   Set<String> get onlineIps => _onlineDevices.keys.toSet();
 
   String _myName = '';
+  String _myAvatar = '';
   String _myIp = '';
   AppDatabase? _db;
 
-  Future<void> start(String name, String myIp, AppDatabase db) async {
+  Future<void> start(String name, String avatar, String myIp, AppDatabase db) async {
     _myName = name;
+    _myAvatar = avatar;
     _myIp = myIp;
     _db = db;
 
@@ -46,6 +48,7 @@ class DiscoveryService {
     for (final d in known) {
       _allDevices[d.ip] = DiscoveredDevice(
         name: d.name,
+        avatar: '',
         ip: d.ip,
         port: d.port,
         lastSeen: DateTime.parse(d.lastSeen),
@@ -92,8 +95,9 @@ class DiscoveryService {
     _broadcast();
   }
 
-  void updateName(String newName) {
+  void updateProfile(String newName, String newAvatar) {
     _myName = newName;
+    _myAvatar = newAvatar;
     _broadcast();
   }
 
@@ -101,6 +105,7 @@ class DiscoveryService {
     if (_socket == null) return;
     final payload = jsonEncode({
       'name': _myName,
+      'avatar': _myAvatar,
       'ip': _myIp,
       'port': chatPort,
     });

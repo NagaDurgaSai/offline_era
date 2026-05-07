@@ -260,25 +260,26 @@ class _ChatScreenState extends State<ChatScreen>
 
   Future<void> _saveFile(ChatMessage msg) async {
     if (msg.savedPath == null) return;
-    if (Platform.isMacOS || Platform.isWindows) {
-      final sep = Platform.pathSeparator;
-      final dir = msg.savedPath!.substring(0, msg.savedPath!.lastIndexOf(sep));
-      if (Platform.isMacOS) {
-        await Process.run('open', [dir]);
-      } else {
-        await Process.run('explorer', [dir]);
-      }
+    if (Platform.isMacOS) {
+      // show in Finder
+      final dir = msg.savedPath!.substring(
+          0, msg.savedPath!.lastIndexOf(Platform.pathSeparator));
+      await Process.run('open', [dir]);
+    } else if (Platform.isWindows) {
+      // save to Downloads on Windows — file already there, open folder
+      final dir = msg.savedPath!.substring(
+          0, msg.savedPath!.lastIndexOf(Platform.pathSeparator));
+      await Process.run('explorer', [dir]);
     } else {
-      if (msg.fileBytes == null) return;
+      // Android — save as dialog
+      if (msg.fileBytes == null && msg.savedPath == null) return;
+      final bytes = msg.fileBytes ?? await File(msg.savedPath!).readAsBytes();
       final name = msg.fileName ?? msg.content;
-      final result = await FilePicker.platform.saveFile(
+      await FilePicker.platform.saveFile(
         dialogTitle: 'save file',
         fileName: name,
-        bytes: msg.fileBytes!,
+        bytes: bytes,
       );
-      if (result != null) {
-        print('saved to $result');
-      }
     }
   }
 
@@ -464,7 +465,7 @@ class _ChatScreenState extends State<ChatScreen>
                           padding: const EdgeInsets.symmetric(vertical: 8),
                           child: Center(
                             child: Text(
-                              'show in finder',
+                              isDesktop ? 'show in folder' : 'save',
                               style: GoogleFonts.spaceGrotesk(
                                 fontSize: 11,
                                 fontWeight: FontWeight.w700,
@@ -855,13 +856,15 @@ class _ChatScreenState extends State<ChatScreen>
                 shape: BoxShape.circle,
               ),
               child: Center(
-                child: Text(
-                  widget.device.name[0].toUpperCase(),
-                  style: GoogleFonts.spaceGrotesk(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      color: const Color(0xFFB8FF57)),
-                ),
+                child: widget.device.avatar.isNotEmpty
+                    ? Text(widget.device.avatar, style: const TextStyle(fontSize: 16))
+                    : Text(
+                        widget.device.name[0].toUpperCase(),
+                        style: GoogleFonts.spaceGrotesk(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: const Color(0xFFB8FF57)),
+                      ),
               ),
             ),
             const SizedBox(width: 10),

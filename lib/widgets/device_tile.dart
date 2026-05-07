@@ -48,13 +48,15 @@ class DeviceTile extends StatelessWidget {
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Center(
-                    child: Text(
-                      device.name[0].toUpperCase(),
-                      style: GoogleFonts.spaceGrotesk(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w700,
-                          color: const Color(0xFFB8FF57)),
-                    ),
+                    child: device.avatar.isNotEmpty
+                        ? Text(device.avatar, style: const TextStyle(fontSize: 20))
+                        : Text(
+                            device.name[0].toUpperCase(),
+                            style: GoogleFonts.spaceGrotesk(
+                                fontSize: 20,
+                                fontWeight: FontWeight.w700,
+                                color: const Color(0xFFB8FF57)),
+                          ),
                   ),
                 ),
                 Positioned(

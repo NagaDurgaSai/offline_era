@@ -5,16 +5,19 @@ import 'package:device_info_plus/device_info_plus.dart';
 
 class UserProvider extends ChangeNotifier {
   String _name = '';
+  String _avatar = '';
   String _localIp = '';
   bool _isSetup = false;
 
   String get name => _name;
+  String get avatar => _avatar;
   String get localIp => _localIp;
   bool get isSetup => _isSetup;
 
   Future<void> init() async {
     final prefs = await SharedPreferences.getInstance();
     _name = prefs.getString('user_name') ?? '';
+    _avatar = prefs.getString('user_avatar') ?? '';
     _isSetup = _name.isNotEmpty;
     await _fetchLocalIp();
     notifyListeners();
@@ -64,6 +67,13 @@ class UserProvider extends ChangeNotifier {
     _isSetup = true;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('user_name', _name);
+    notifyListeners();
+  }
+
+  Future<void> saveAvatar(String emoji) async {
+    _avatar = emoji;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('user_avatar', emoji);
     notifyListeners();
   }
 

@@ -1,11 +1,13 @@
 class DiscoveredDevice {
   final String name;
+  final String avatar;
   final String ip;
   final int port;
   final DateTime lastSeen;
 
   DiscoveredDevice({
     required this.name,
+    this.avatar = '',
     required this.ip,
     required this.port,
     required this.lastSeen,
@@ -16,6 +18,7 @@ class DiscoveredDevice {
   DiscoveredDevice copyWith({DateTime? lastSeen}) {
     return DiscoveredDevice(
       name: name,
+      avatar: avatar,
       ip: ip,
       port: port,
       lastSeen: lastSeen ?? this.lastSeen,
@@ -24,6 +27,7 @@ class DiscoveredDevice {
 
   Map<String, dynamic> toJson() => {
         'name': name,
+        'avatar': avatar,
         'ip': ip,
         'port': port,
       };
@@ -31,6 +35,7 @@ class DiscoveredDevice {
   factory DiscoveredDevice.fromJson(Map<String, dynamic> json) {
     return DiscoveredDevice(
       name: json['name'],
+      avatar: (json['avatar'] ?? '').toString(),
       ip: json['ip'],
       port: json['port'],
       lastSeen: DateTime.now(),

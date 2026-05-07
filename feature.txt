@@ -9,6 +9,71 @@
 
 
 
+v1.3 ---->
+
+the open finder is only for mac on adnroid save as and on windows just save so according to platfor the button chanegs i appriciatedyou for the previeos on save as on android and open on mac why did yo chnage it 
+and after closing almost its taking like what 10 seconds to grey out the cha and baki its good 
+third in profile we will also add a new feature that is instead of showing the first ltter we will give option to select any icon or the ifrst letter from pool of png we will give not many 10-15 are enough can be cool genz pngs 
+and one more update intead of directly changing the name we will add a small iconn beside the name when we click it then we can type the new name and then we can see the save not just we go tp profile and see the save button looks dirty 
+
+fixes for the v1.3 
+the icons of profile are just being shown on local deivice i want them same as name the updates and changes as fast the names are done 
+since the save button is removed by default the info buttons came up and also small change the version and platform should be displayed 
+like the ip adress on the homescreen only the storage used should be there as a card and even that should be at the bottom not in the middle 
+i can still see the fucking show finder on android i didnt even test this in windoes and ipad so idk
+
+Here’s what was changed.
+Profile icon sync like name sync
+Added separate avatar field in discovery model/payload.
+Stopped prefixing emoji into name.
+Avatar now updates remotely when changed, same as name.
+Files:
+device.dart
+discovery_service.dart
+home_screen.dart
+Remote UI shows selected emoji icon
+Device list tile uses avatar emoji if present.
+Chat header uses avatar emoji if present.
+Files:
+device_tile.dart
+chat_screen.dart
+Save button removal / profile editing UX
+Removed old explicit save-button flow.
+Inline name edit with edit/close toggle.
+Name centered below avatar.
+Edit button on same line as name.
+Android overlap issue fixed by replacing stack layout with safe row layout.
+File:
+profile_screen.dart
+Version + platform placement
+Kept off HomeScreen (as requested later).
+Added as plain footer text in Profile (not as cards).
+File:
+profile_screen.dart
+Storage card placement
+Only storage used remains as info card.
+Positioned at bottom section of profile.
+File:
+profile_screen.dart
+Android “show finder” issue
+Changed action label to platform-safe text:
+desktop: show in folder
+mobile: save
+File:
+chat_screen.dart
+Name empty validation + better input visibility
+Added clause: empty name cannot be saved.
+Shows snack message: name cannot be empty.
+Added subtle gradient/border to name input area so it’s visible on dark background.
+File:
+profile_screen.dart
+
+v1.4
+Two options for v1.3:   Manual IP connect — add an option to enter an IP address manually to connect to a device that can't be auto-discovered. Simple, works across wired/wireless. because i installed this on windows and its connected to router via cable and uk wht happened 
+                        mDNS/Bonjour discovery — replaces UDP broadcast, works across wired+wireless on most routers. More complex to implement.
+from single devices if mulitiples messages arent sent notifcations are spammed separately i want same device many notifcation is same bubble im talking about the device notifcation
+and in profile if i tap storage it should take me to page where it should show which chat is what size , there if i tap and hold the chat i need a delte button or clear data of that particular chat
+
 
 Discovery should move from a single broadcast method to a layered strategy: 
 first try subnet-aware UDP discovery (broadcast per active interface/subnet, 
