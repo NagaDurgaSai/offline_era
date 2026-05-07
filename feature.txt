@@ -5,3 +5,19 @@
 4) for only and only PDF and Pictures that are sent a small preview is appriciated and on top i need the view the file that is supported lets say its only pdf and the phone supports opening i can just open directly from there, if its an excel and i dont have so not supported dailgue is fine 
 5) for the app im not getting any notifcations
 6) for the long text format also i need a copy button directly like i have for the code r
+
+
+
+
+
+Discovery should move from a single broadcast method to a layered strategy: 
+first try subnet-aware UDP discovery (broadcast per active interface/subnet, 
+not only 255.255.255.255), then fall back gracefully when LAN policies block broadcast. 
+Add a small discovery state model (normal, degraded, manual-only) and expose it in UI so users understand what’s happening. 
+Include stable peer identity in discovery/handshake payloads (deviceId, name, appVersion, capabilities) so peers can be recognized even if IP changes (DHCP), and so version/capability mismatches don’t break messaging.
+
+Add a manual peer path as a first-class reliability feature: 
+allow Add peer by IP[:port], validate, attempt handshake, and save successful entries as “Saved Peers” 
+with reconnect/backoff probes. On app start, probe last-known peers from cache so users can reconnect 
+instantly even if discovery is partially blocked. This gives you “always works” behavior across strict 
+enterprise networks while keeping the app fully local and serverless.
