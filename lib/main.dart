@@ -34,7 +34,7 @@ class OfflineEraApp extends StatelessWidget {
           onSurface: Colors.white,
         ),
         scaffoldBackgroundColor: const Color(0xFF0F0F0F),
-      ),c
+      ),
       home: user.isSetup ? const HomeScreen() : const SetupScreen(),
     );
   }

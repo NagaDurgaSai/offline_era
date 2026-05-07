@@ -85,6 +85,8 @@ class ChatService {
 
   void updateName(String name) => _myName = name;
 
+  void clearCache(String peerIp) => _cache.remove(peerIp);
+
   void _handleIncoming(Socket socket) {
     final remoteIp = socket.remoteAddress.address;
     _connections[remoteIp] = socket;

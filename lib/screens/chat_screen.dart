@@ -224,24 +224,61 @@ class _ChatScreenState extends State<ChatScreen>
     await widget.chatService.sendFile(widget.device, name, bytes);
   }
 
-  Future<void> _saveFile(ChatMessage msg) async {
-    if (msg.fileBytes == null && msg.savedPath == null) return;
-    final bytes = msg.fileBytes ?? await File(msg.savedPath!).readAsBytes();
-    final name = msg.fileName ?? msg.content;
-    final result = await FilePicker.platform.saveFile(
-      dialogTitle: 'save file',
-      fileName: name,
-      bytes: bytes,
+  Future<void> _clearChat() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A1A),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        title: Text('clear chat?', style: GoogleFonts.spaceGrotesk(color: Colors.white, fontWeight: FontWeight.w700)),
+        content: Text('removes all messages and files. cannot be undone.', style: GoogleFonts.spaceGrotesk(color: Colors.white54, fontSize: 13)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text('cancel', style: GoogleFonts.spaceGrotesk(color: Colors.white38)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text('clear', style: GoogleFonts.spaceGrotesk(color: const Color(0xFFFF6B6B), fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
     );
-    if (result != null && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('saved to \$result',
-              style: GoogleFonts.spaceGrotesk(fontSize: 12)),
-          backgroundColor: const Color(0xFF1A1A1A),
-          behavior: SnackBarBehavior.floating,
-        ),
+    if (confirm != true) return;
+    for (final msg in _messages) {
+      if (msg.savedPath != null) {
+        try {
+          final f = File(msg.savedPath!);
+          if (await f.exists()) await f.delete();
+        } catch (_) {}
+      }
+    }
+    await widget.chatService.db.deleteMessagesForPeer(widget.device.ip);
+    widget.chatService.clearCache(widget.device.ip);
+    if (mounted) setState(() => _messages.clear());
+  }
+
+  Future<void> _saveFile(ChatMessage msg) async {
+    if (msg.savedPath == null) return;
+    if (Platform.isMacOS || Platform.isWindows) {
+      final sep = Platform.pathSeparator;
+      final dir = msg.savedPath!.substring(0, msg.savedPath!.lastIndexOf(sep));
+      if (Platform.isMacOS) {
+        await Process.run('open', [dir]);
+      } else {
+        await Process.run('explorer', [dir]);
+      }
+    } else {
+      if (msg.fileBytes == null) return;
+      final name = msg.fileName ?? msg.content;
+      final result = await FilePicker.platform.saveFile(
+        dialogTitle: 'save file',
+        fileName: name,
+        bytes: msg.fileBytes!,
       );
+      if (result != null) {
+        print('saved to $result');
+      }
     }
   }
 
@@ -427,7 +464,7 @@ class _ChatScreenState extends State<ChatScreen>
                           padding: const EdgeInsets.symmetric(vertical: 8),
                           child: Center(
                             child: Text(
-                              'save',
+                              'show in finder',
                               style: GoogleFonts.spaceGrotesk(
                                 fontSize: 11,
                                 fontWeight: FontWeight.w700,
@@ -835,6 +872,25 @@ class _ChatScreenState extends State<ChatScreen>
                     color: Colors.white)),
           ],
         ),
+        actions: [
+          PopupMenuButton(
+            icon: const Icon(Icons.more_vert_rounded, color: Colors.white54),
+            color: const Color(0xFF1A1A1A),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            itemBuilder: (_) => [
+              PopupMenuItem(
+                onTap: _clearChat,
+                child: Row(
+                  children: [
+                    const Icon(Icons.delete_sweep_rounded, color: Color(0xFFFF6B6B), size: 18),
+                    const SizedBox(width: 10),
+                    Text('clear chat', style: GoogleFonts.spaceGrotesk(color: const Color(0xFFFF6B6B), fontSize: 14)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
         bottom: TabBar(
           controller: _tabController,
           indicatorColor: const Color(0xFFB8FF57),
