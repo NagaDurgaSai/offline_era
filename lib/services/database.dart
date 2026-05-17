@@ -23,6 +23,7 @@ class Messages extends Table {
 }
 
 class KnownDevices extends Table {
+  TextColumn get deviceId => text().withDefault(const Constant(''))();
   TextColumn get ip => text()();
   TextColumn get name => text()();
   IntColumn get port => integer()();
@@ -37,13 +38,16 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
     onUpgrade: (m, from, to) async {
       if (from < 2) {
         await m.createTable(knownDevices);
+      }
+      if (from < 3) {
+        await m.addColumn(knownDevices, knownDevices.deviceId);
       }
     },
   );
@@ -65,6 +69,19 @@ class AppDatabase extends _$AppDatabase {
 
   Future<void> upsertKnownDevice(KnownDevicesCompanion device) =>
       into(knownDevices).insertOnConflictUpdate(device);
+
+  Future<void> deleteKnownDevice(String ip) =>
+      (delete(knownDevices)..where((d) => d.ip.equals(ip))).go();
+
+  Future<void> deleteKnownDeviceByDeviceId(String deviceId) =>
+      (delete(knownDevices)..where((d) => d.deviceId.equals(deviceId))).go();
+
+  Future<KnownDevice?> getKnownDeviceByDeviceId(String deviceId) async {
+    final results = await (select(knownDevices)
+          ..where((d) => d.deviceId.equals(deviceId)))
+        .get();
+    return results.isEmpty ? null : results.first;
+  }
 
   Future<Message?> lastMessageForPeer(String peerIp) async {
     final results = await (select(messages)

@@ -14,42 +14,56 @@ class NotificationService {
     );
     const settings = InitializationSettings(android: android, macOS: darwin);
     await _plugin.initialize(settings);
+    final androidPlugin =
+        _plugin.resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>();
+    await androidPlugin?.requestNotificationsPermission();
     _initialized = true;
   }
 
-  static Future<void> showMessage(String sender, String preview) async {
-    const android = AndroidNotificationDetails(
+  static Future<void> showMessage(
+    String sender,
+    String preview, {
+    String? tag,
+    int? id,
+  }) async {
+    final notifId = id ?? (tag?.hashCode.abs() ?? DateTime.now().millisecondsSinceEpoch ~/ 1000);
+    final android = AndroidNotificationDetails(
       'messages',
       'Messages',
       channelDescription: 'Incoming messages',
       importance: Importance.high,
       priority: Priority.high,
+      tag: tag,
+      // Keep per-peer overwrite via `id`/`tag`; avoid Android group quirks.
+      groupKey: null,
     );
     const darwin = DarwinNotificationDetails();
-    const details = NotificationDetails(android: android, macOS: darwin);
-    await _plugin.show(
-      DateTime.now().millisecondsSinceEpoch ~/ 1000,
-      sender,
-      preview,
-      details,
-    );
+    final details = NotificationDetails(android: android, macOS: darwin);
+    await _plugin.show(notifId, sender, preview, details);
   }
 
-  static Future<void> showFile(String sender, String fileName) async {
-    const android = AndroidNotificationDetails(
+  static Future<void> showFile(String sender, String fileName, {String? tag}) async {
+    final notifId = tag?.hashCode.abs() ?? DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final android = AndroidNotificationDetails(
       'files',
       'Files',
       channelDescription: 'Incoming files',
       importance: Importance.high,
       priority: Priority.high,
+      tag: tag,
+      groupKey: null,
     );
     const darwin = DarwinNotificationDetails();
-    const details = NotificationDetails(android: android, macOS: darwin);
-    await _plugin.show(
-      DateTime.now().millisecondsSinceEpoch ~/ 1000,
-      sender,
-      'sent you a file: $fileName',
-      details,
-    );
+    final details = NotificationDetails(android: android, macOS: darwin);
+    await _plugin.show(notifId, sender, 'sent you: $fileName', details);
+  }
+
+  static Future<void> cancel(int id) async {
+    await _plugin.cancel(id);
+  }
+
+  static Future<void> cancelAll() async {
+    await _plugin.cancelAll();
   }
 }

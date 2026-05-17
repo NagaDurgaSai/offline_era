@@ -1,6 +1,6 @@
 import 'dart:typed_data';
 
-enum MessageType { text, code, clipboard, file }
+enum MessageType { text, code, clipboard, file, seen }
 
 class ChatMessage {
   final String id;

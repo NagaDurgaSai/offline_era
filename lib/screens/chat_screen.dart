@@ -6,11 +6,13 @@ import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_highlight/flutter_highlight.dart';
 import 'package:flutter_highlight/themes/atom-one-dark.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:open_filex/open_filex.dart';
+import 'package:pdfx/pdfx.dart';
 import 'package:share_plus/share_plus.dart' show Share, XFile;
 import 'package:provider/provider.dart';
 import '../models/device.dart';
@@ -21,11 +23,15 @@ import '../services/chat_service.dart';
 class ChatScreen extends StatefulWidget {
   final DiscoveredDevice device;
   final ChatService chatService;
+  final int initialUnreadCount;
+  final String? lastReadMessageId;
 
   const ChatScreen({
     super.key,
     required this.device,
     required this.chatService,
+    this.initialUnreadCount = 0,
+    this.lastReadMessageId,
   });
 
   @override
@@ -42,15 +48,49 @@ class _ChatScreenState extends State<ChatScreen>
   MessageType _inputMode = MessageType.text;
   late TabController _tabController;
   bool _dragOver = false;
+  bool _seenByPeer = false;
+  int? _firstNewChatIndex;
+  final Map<int, GlobalKey> _chatItemKeys = {};
+  bool _showScrollToBottom = false;
 
   @override
   void initState() {
     super.initState();
     widget.chatService.isInChat = true;
+    _scrollController.addListener(_onScrollChanged);
     _tabController = TabController(length: 2, vsync: this);
     _messages = [];
+    widget.chatService.activeChatIp = widget.device.ip;
+    widget.chatService.clearNotificationsFor(widget.device.ip);
     widget.chatService.historyFor(widget.device.ip).then((msgs) {
-      if (mounted) setState(() => _messages = List.from(msgs));
+      if (mounted) {
+        setState(() {
+          _messages = List.from(msgs);
+          final chatMsgs = _messages
+              .where((m) =>
+                  m.type == MessageType.text || m.type == MessageType.code)
+              .toList();
+          final chatCount = chatMsgs.length;
+          if (widget.initialUnreadCount > 0 && chatCount > 0) {
+            // fresh unreads — jump to first unread
+            _firstNewChatIndex =
+                (chatCount - widget.initialUnreadCount).clamp(0, chatCount - 1);
+          } else if (widget.lastReadMessageId != null && chatCount > 0) {
+            // returning after reading — jump just past last read message
+            final idx = chatMsgs.indexWhere((m) => m.id == widget.lastReadMessageId);
+            if (idx != -1 && idx < chatCount - 1) {
+              _firstNewChatIndex = idx + 1;
+            } else {
+              _firstNewChatIndex = null;
+            }
+          } else {
+            _firstNewChatIndex = null;
+          }
+        });
+        _scrollToUnreadBoundaryIfNeeded();
+        // send seen signal
+        widget.chatService.sendSeen(widget.device);
+      }
     });
 
     _msgSub = widget.chatService.messageStream.listen((msg) {
@@ -69,11 +109,19 @@ class _ChatScreenState extends State<ChatScreen>
         }
       }
     });
+
+    widget.chatService.seenStream.listen((peerIp) {
+      if (peerIp == widget.device.ip && mounted) {
+        setState(() => _seenByPeer = true);
+      }
+    });
   }
 
   @override
   void dispose() {
     widget.chatService.isInChat = false;
+    widget.chatService.activeChatIp = null;
+    _scrollController.removeListener(_onScrollChanged);
     _msgSub?.cancel();
     _fileSub?.cancel();
     _textController.dispose();
@@ -90,6 +138,66 @@ class _ChatScreenState extends State<ChatScreen>
           duration: const Duration(milliseconds: 200),
           curve: Curves.easeOut,
         );
+      }
+    });
+  }
+
+  void _onScrollChanged() {
+    if (!_scrollController.hasClients) return;
+    if (_firstNewChatIndex != null) {
+      final markerContext = _chatItemKeys[_firstNewChatIndex!]?.currentContext;
+      if (markerContext != null) {
+        final box = markerContext.findRenderObject() as RenderBox?;
+        final viewport = RenderAbstractViewport.of(box);
+        if (box != null && viewport != null) {
+          final reveal = viewport.getOffsetToReveal(box, 0).offset;
+          if (_scrollController.offset >= reveal - 8) {
+            setState(() => _firstNewChatIndex = null);
+          }
+        }
+      }
+    }
+    final distanceFromBottom =
+        _scrollController.position.maxScrollExtent - _scrollController.offset;
+    final shouldShow = distanceFromBottom > 220;
+    if (shouldShow != _showScrollToBottom && mounted) {
+      setState(() => _showScrollToBottom = shouldShow);
+    }
+  }
+
+  void _scrollToUnreadBoundaryIfNeeded() {
+    final index = _firstNewChatIndex;
+    if (index == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted || !_scrollController.hasClients) return;
+
+      final chatCount = _messages
+          .where((m) => m.type == MessageType.text || m.type == MessageType.code)
+          .length;
+      if (chatCount <= 1) return;
+
+      final ratio = index / (chatCount - 1);
+      final estimatedOffset = _scrollController.position.maxScrollExtent * ratio;
+      _scrollController.jumpTo(
+        estimatedOffset.clamp(
+          _scrollController.position.minScrollExtent,
+          _scrollController.position.maxScrollExtent,
+        ),
+      );
+
+      for (int attempt = 0; attempt < 4; attempt++) {
+        await Future.delayed(const Duration(milliseconds: 16));
+        if (!mounted) return;
+        final ctx = _chatItemKeys[index]?.currentContext;
+        if (ctx != null) {
+          await Scrollable.ensureVisible(
+            ctx,
+            duration: const Duration(milliseconds: 260),
+            alignment: 0.08,
+            curve: Curves.easeOut,
+          );
+          return;
+        }
       }
     });
   }
@@ -184,6 +292,9 @@ class _ChatScreenState extends State<ChatScreen>
     final text = _textController.text.trim();
     if (text.isEmpty) return;
     _textController.clear();
+    if (_seenByPeer) {
+      setState(() => _seenByPeer = false);
+    }
     await widget.chatService.sendTo(widget.device, text, _inputMode);
     _scrollToBottom();
   }
@@ -213,6 +324,9 @@ class _ChatScreenState extends State<ChatScreen>
       return;
     }
     print("DEBUG: sending file \${pf.name} \${bytes.length} bytes");
+    if (_seenByPeer) {
+      setState(() => _seenByPeer = false);
+    }
     await widget.chatService.sendFile(widget.device, pf.name, bytes);
     print("DEBUG: sendFile done");
   }
@@ -221,6 +335,9 @@ class _ChatScreenState extends State<ChatScreen>
     final file = File(path);
     final bytes = await file.readAsBytes();
     final name = path.split(Platform.pathSeparator).last;
+    if (_seenByPeer) {
+      setState(() => _seenByPeer = false);
+    }
     await widget.chatService.sendFile(widget.device, name, bytes);
   }
 
@@ -369,25 +486,24 @@ class _ChatScreenState extends State<ChatScreen>
                 ),
               ),
             // square preview for pdf
-            if (isPdf)
+            if (isPdf && msg.fileBytes != null)
+              GestureDetector(
+                onTap: () => _openFile(msg),
+                child: ClipRRect(
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(10)),
+                  child: _PdfPreview(bytes: msg.fileBytes!),
+                ),
+              ),
+            if (isPdf && msg.fileBytes == null)
               GestureDetector(
                 onTap: () => _openFile(msg),
                 child: Container(
                   width: 200,
                   height: 200,
                   color: const Color(0xFFFF6B6B).withOpacity(0.07),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.picture_as_pdf_rounded,
-                          color: Color(0xFFFF6B6B), size: 48),
-                      const SizedBox(height: 8),
-                      Text('PDF',
-                          style: GoogleFonts.spaceGrotesk(
-                              fontSize: 12,
-                              color: const Color(0xFFFF6B6B).withOpacity(0.7),
-                              fontWeight: FontWeight.w600)),
-                    ],
+                  child: const Center(
+                    child: Icon(Icons.picture_as_pdf_rounded,
+                        color: Color(0xFFFF6B6B), size: 48),
                   ),
                 ),
               ),
@@ -505,53 +621,88 @@ class _ChatScreenState extends State<ChatScreen>
   }
 
   Widget _buildCodeMessage(ChatMessage msg) {
+    final rawLines = msg.content.split('\n');
+    final lines = rawLines.length == 1 ? msg.content.split(r'\n') : rawLines;
+    final preview = lines.take(5).join('\n');
+    final isLongCode = lines.length > 5;
+
     return Align(
       alignment: msg.isMe ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-        constraints: BoxConstraints(
-            maxWidth: MediaQuery.of(context).size.width * 0.82),
-        decoration: BoxDecoration(
-          color: const Color(0xFF1A1A1A),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.white10),
-        ),
-        clipBehavior: Clip.hardEdge,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              color: Colors.white.withOpacity(0.04),
-              child: Row(
+      child: StatefulBuilder(
+        builder: (context, setLocal) {
+          bool expanded = false;
+          return StatefulBuilder(
+            builder: (context, setLocal2) => Container(
+              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              constraints: BoxConstraints(
+                  maxWidth: MediaQuery.of(context).size.width * 0.82),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1A1A1A),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.white10),
+              ),
+              clipBehavior: Clip.hardEdge,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(Icons.code_rounded,
-                      size: 12, color: Color(0xFFB8FF57)),
-                  const SizedBox(width: 6),
-                  Text('code',
-                      style: GoogleFonts.spaceGrotesk(
-                          fontSize: 11,
-                          color: const Color(0xFFB8FF57),
-                          fontWeight: FontWeight.w600)),
-                  const Spacer(),
-                  GestureDetector(
-                    onTap: () =>
-                        Clipboard.setData(ClipboardData(text: msg.content)),
-                    child: const Icon(Icons.copy_rounded,
-                        size: 14, color: Colors.white38),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    color: Colors.white.withOpacity(0.04),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.code_rounded,
+                            size: 12, color: Color(0xFFB8FF57)),
+                        const SizedBox(width: 6),
+                        Text('code · ${lines.length} lines',
+                            style: GoogleFonts.spaceGrotesk(
+                                fontSize: 11,
+                                color: const Color(0xFFB8FF57),
+                                fontWeight: FontWeight.w600)),
+                        const Spacer(),
+                        GestureDetector(
+                          onTap: () => Clipboard.setData(
+                              ClipboardData(text: msg.content)),
+                          child: const Icon(Icons.copy_rounded,
+                              size: 14, color: Colors.white38),
+                        ),
+                      ],
+                    ),
                   ),
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: HighlightView(
+                      expanded ? msg.content : preview,
+                      language: 'dart',
+                      theme: atomOneDarkTheme,
+                      padding: const EdgeInsets.all(12),
+                      textStyle: GoogleFonts.jetBrainsMono(fontSize: 12),
+                    ),
+                  ),
+                  if (isLongCode)
+                    GestureDetector(
+                      onTap: () => setLocal2(() => expanded = !expanded),
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(vertical: 7),
+                        color: Colors.white.withOpacity(0.03),
+                        child: Center(
+                          child: Text(
+                            expanded
+                                ? 'show less ↑'
+                                : 'show ${lines.length - 5} more lines ↓',
+                            style: GoogleFonts.spaceGrotesk(
+                                fontSize: 11,
+                                color: const Color(0xFFB8FF57),
+                                fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                      ),
+                    ),
                 ],
               ),
             ),
-            HighlightView(
-              msg.content,
-              language: 'dart',
-              theme: atomOneDarkTheme,
-              padding: const EdgeInsets.all(12),
-              textStyle: GoogleFonts.jetBrainsMono(fontSize: 12),
-            ),
-          ],
-        ),
+          );
+        },
       ),
     );
   }
@@ -619,13 +770,33 @@ class _ChatScreenState extends State<ChatScreen>
               ),
             ),
             const SizedBox(height: 2),
-            Text(_formatTime(msg.timestamp),
-                style: GoogleFonts.spaceGrotesk(
-                    fontSize: 10, color: Colors.white24)),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(_formatTime(msg.timestamp),
+                    style: GoogleFonts.spaceGrotesk(
+                        fontSize: 10, color: Colors.white24)),
+                if (msg.isMe && _seenByPeer && _isLastSentMessage(msg)) ...[
+                  const SizedBox(width: 4),
+                  Text('seen',
+                      style: GoogleFonts.spaceGrotesk(
+                          fontSize: 10,
+                          color: const Color(0xFFB8FF57).withOpacity(0.7))),
+                ],
+              ],
+            ),
           ],
         ),
       ),
     );
+  }
+
+  bool _isLastSentMessage(ChatMessage msg) {
+    final sentMsgs = _messages
+        .where((m) => m.isMe &&
+            (m.type == MessageType.text || m.type == MessageType.code))
+        .toList();
+    return sentMsgs.isNotEmpty && sentMsgs.last.id == msg.id;
   }
 
   Widget _buildChatTab() {
@@ -636,20 +807,125 @@ class _ChatScreenState extends State<ChatScreen>
     return Column(
       children: [
         Expanded(
-          child: chatMsgs.isEmpty
-              ? Center(
-                  child: Text('say something.',
-                      style: GoogleFonts.spaceGrotesk(
-                          color: Colors.white24, fontSize: 14)))
-              : ListView.builder(
-                  controller: _scrollController,
-                  padding: const EdgeInsets.only(top: 8, bottom: 8),
-                  itemCount: chatMsgs.length,
-                  itemBuilder: (_, i) => _buildMessage(chatMsgs[i]),
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: chatMsgs.isEmpty
+                    ? Center(
+                        child: Text('say something.',
+                            style: GoogleFonts.spaceGrotesk(
+                                color: Colors.white24, fontSize: 14)))
+                    : ListView.builder(
+                        controller: _scrollController,
+                        padding: const EdgeInsets.only(top: 8, bottom: 8),
+                        itemCount: chatMsgs.length,
+                        itemBuilder: (_, i) {
+                          final key =
+                              _chatItemKeys.putIfAbsent(i, () => GlobalKey());
+                          return KeyedSubtree(
+                            key: key,
+                            child: Column(
+                              children: [
+                                if (_firstNewChatIndex == i)
+                                  _buildUnreadBoundaryMarker(),
+                                _buildMessage(chatMsgs[i]),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+              ),
+              Positioned(
+                right: 18,
+                bottom: 16,
+                child: AnimatedOpacity(
+                  duration: const Duration(milliseconds: 180),
+                  opacity: _showScrollToBottom ? 1 : 0,
+                  child: IgnorePointer(
+                    ignoring: !_showScrollToBottom,
+                    child: GestureDetector(
+                      onTap: _scrollToBottom,
+                      child: Container(
+                        width: 42,
+                        height: 42,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFB8FF57),
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFFB8FF57).withOpacity(0.35),
+                              blurRadius: 14,
+                              spreadRadius: 1,
+                            ),
+                          ],
+                        ),
+                        child: const Icon(
+                          Icons.keyboard_arrow_down_rounded,
+                          color: Colors.black,
+                          size: 24,
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
+              ),
+            ],
+          ),
         ),
         _buildInput(),
       ],
+    );
+  }
+
+  Widget _buildUnreadBoundaryMarker() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(22, 6, 22, 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: Container(
+              height: 1,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    Colors.transparent,
+                    const Color(0xFFB8FF57).withOpacity(0.7),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          Container(
+            width: 8,
+            height: 8,
+            margin: const EdgeInsets.symmetric(horizontal: 10),
+            decoration: BoxDecoration(
+              color: const Color(0xFFB8FF57),
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFFB8FF57).withOpacity(0.45),
+                  blurRadius: 8,
+                  spreadRadius: 1.5,
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: Container(
+              height: 1,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    const Color(0xFFB8FF57).withOpacity(0.7),
+                    Colors.transparent,
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -909,6 +1185,59 @@ class _ChatScreenState extends State<ChatScreen>
         child: TabBarView(
           controller: _tabController,
           children: [_buildChatTab(), _buildFilesTab()],
+        ),
+      ),
+    );
+  }
+}
+
+class _PdfPreview extends StatefulWidget {
+  final Uint8List bytes;
+  const _PdfPreview({required this.bytes});
+
+  @override
+  State<_PdfPreview> createState() => _PdfPreviewState();
+}
+
+class _PdfPreviewState extends State<_PdfPreview> {
+  PdfController? _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = PdfController(
+      document: PdfDocument.openData(widget.bytes),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 200,
+      height: 200,
+      child: PdfView(
+        controller: _controller!,
+        scrollDirection: Axis.horizontal,
+        builders: PdfViewBuilders<DefaultBuilderOptions>(
+          options: const DefaultBuilderOptions(),
+          documentLoaderBuilder: (_) => const Center(
+            child: CircularProgressIndicator(
+              color: Color(0xFFB8FF57),
+              strokeWidth: 2,
+            ),
+          ),
+          pageLoaderBuilder: (_) => const Center(
+            child: CircularProgressIndicator(
+              color: Color(0xFFB8FF57),
+              strokeWidth: 2,
+            ),
+          ),
         ),
       ),
     );

@@ -4,6 +4,7 @@ class DiscoveredDevice {
   final String ip;
   final int port;
   final DateTime lastSeen;
+  final String deviceId;
 
   DiscoveredDevice({
     required this.name,
@@ -11,17 +12,19 @@ class DiscoveredDevice {
     required this.ip,
     required this.port,
     required this.lastSeen,
+    this.deviceId = '',
   });
 
-  String get id => '$ip:$port';
+  String get id => deviceId.isNotEmpty ? deviceId : '$ip:$port';
 
-  DiscoveredDevice copyWith({DateTime? lastSeen}) {
+  DiscoveredDevice copyWith({DateTime? lastSeen, String? ip}) {
     return DiscoveredDevice(
       name: name,
       avatar: avatar,
-      ip: ip,
+      ip: ip ?? this.ip,
       port: port,
       lastSeen: lastSeen ?? this.lastSeen,
+      deviceId: deviceId,
     );
   }
 
@@ -30,6 +33,7 @@ class DiscoveredDevice {
         'avatar': avatar,
         'ip': ip,
         'port': port,
+        'deviceId': deviceId,
       };
 
   factory DiscoveredDevice.fromJson(Map<String, dynamic> json) {
@@ -39,13 +43,18 @@ class DiscoveredDevice {
       ip: json['ip'],
       port: json['port'],
       lastSeen: DateTime.now(),
+      deviceId: (json['deviceId'] ?? '').toString(),
     );
   }
 
   @override
   bool operator ==(Object other) =>
-      other is DiscoveredDevice && other.ip == ip && other.port == port;
+      other is DiscoveredDevice &&
+      (deviceId.isNotEmpty && other.deviceId.isNotEmpty
+          ? other.deviceId == deviceId
+          : other.ip == ip && other.port == port);
 
   @override
-  int get hashCode => Object.hash(ip, port);
+  int get hashCode =>
+      deviceId.isNotEmpty ? deviceId.hashCode : Object.hash(ip, port);
 }

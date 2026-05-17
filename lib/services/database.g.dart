@@ -518,6 +518,14 @@ class $KnownDevicesTable extends KnownDevices
   final GeneratedDatabase attachedDatabase;
   final String? _alias;
   $KnownDevicesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _deviceIdMeta =
+      const VerificationMeta('deviceId');
+  @override
+  late final GeneratedColumn<String> deviceId = GeneratedColumn<String>(
+      'device_id', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(''));
   static const VerificationMeta _ipMeta = const VerificationMeta('ip');
   @override
   late final GeneratedColumn<String> ip = GeneratedColumn<String>(
@@ -540,7 +548,7 @@ class $KnownDevicesTable extends KnownDevices
       'last_seen', aliasedName, false,
       type: DriftSqlType.string, requiredDuringInsert: true);
   @override
-  List<GeneratedColumn> get $columns => [ip, name, port, lastSeen];
+  List<GeneratedColumn> get $columns => [deviceId, ip, name, port, lastSeen];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -551,6 +559,10 @@ class $KnownDevicesTable extends KnownDevices
       {bool isInserting = false}) {
     final context = VerificationContext();
     final data = instance.toColumns(true);
+    if (data.containsKey('device_id')) {
+      context.handle(_deviceIdMeta,
+          deviceId.isAcceptableOrUnknown(data['device_id']!, _deviceIdMeta));
+    }
     if (data.containsKey('ip')) {
       context.handle(_ipMeta, ip.isAcceptableOrUnknown(data['ip']!, _ipMeta));
     } else if (isInserting) {
@@ -583,6 +595,8 @@ class $KnownDevicesTable extends KnownDevices
   KnownDevice map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
     return KnownDevice(
+      deviceId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}device_id'])!,
       ip: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}ip'])!,
       name: attachedDatabase.typeMapping
@@ -601,18 +615,21 @@ class $KnownDevicesTable extends KnownDevices
 }
 
 class KnownDevice extends DataClass implements Insertable<KnownDevice> {
+  final String deviceId;
   final String ip;
   final String name;
   final int port;
   final String lastSeen;
   const KnownDevice(
-      {required this.ip,
+      {required this.deviceId,
+      required this.ip,
       required this.name,
       required this.port,
       required this.lastSeen});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
+    map['device_id'] = Variable<String>(deviceId);
     map['ip'] = Variable<String>(ip);
     map['name'] = Variable<String>(name);
     map['port'] = Variable<int>(port);
@@ -622,6 +639,7 @@ class KnownDevice extends DataClass implements Insertable<KnownDevice> {
 
   KnownDevicesCompanion toCompanion(bool nullToAbsent) {
     return KnownDevicesCompanion(
+      deviceId: Value(deviceId),
       ip: Value(ip),
       name: Value(name),
       port: Value(port),
@@ -633,6 +651,7 @@ class KnownDevice extends DataClass implements Insertable<KnownDevice> {
       {ValueSerializer? serializer}) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return KnownDevice(
+      deviceId: serializer.fromJson<String>(json['deviceId']),
       ip: serializer.fromJson<String>(json['ip']),
       name: serializer.fromJson<String>(json['name']),
       port: serializer.fromJson<int>(json['port']),
@@ -643,6 +662,7 @@ class KnownDevice extends DataClass implements Insertable<KnownDevice> {
   Map<String, dynamic> toJson({ValueSerializer? serializer}) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return <String, dynamic>{
+      'deviceId': serializer.toJson<String>(deviceId),
       'ip': serializer.toJson<String>(ip),
       'name': serializer.toJson<String>(name),
       'port': serializer.toJson<int>(port),
@@ -651,8 +671,13 @@ class KnownDevice extends DataClass implements Insertable<KnownDevice> {
   }
 
   KnownDevice copyWith(
-          {String? ip, String? name, int? port, String? lastSeen}) =>
+          {String? deviceId,
+          String? ip,
+          String? name,
+          int? port,
+          String? lastSeen}) =>
       KnownDevice(
+        deviceId: deviceId ?? this.deviceId,
         ip: ip ?? this.ip,
         name: name ?? this.name,
         port: port ?? this.port,
@@ -660,6 +685,7 @@ class KnownDevice extends DataClass implements Insertable<KnownDevice> {
       );
   KnownDevice copyWithCompanion(KnownDevicesCompanion data) {
     return KnownDevice(
+      deviceId: data.deviceId.present ? data.deviceId.value : this.deviceId,
       ip: data.ip.present ? data.ip.value : this.ip,
       name: data.name.present ? data.name.value : this.name,
       port: data.port.present ? data.port.value : this.port,
@@ -670,6 +696,7 @@ class KnownDevice extends DataClass implements Insertable<KnownDevice> {
   @override
   String toString() {
     return (StringBuffer('KnownDevice(')
+          ..write('deviceId: $deviceId, ')
           ..write('ip: $ip, ')
           ..write('name: $name, ')
           ..write('port: $port, ')
@@ -679,11 +706,12 @@ class KnownDevice extends DataClass implements Insertable<KnownDevice> {
   }
 
   @override
-  int get hashCode => Object.hash(ip, name, port, lastSeen);
+  int get hashCode => Object.hash(deviceId, ip, name, port, lastSeen);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       (other is KnownDevice &&
+          other.deviceId == this.deviceId &&
           other.ip == this.ip &&
           other.name == this.name &&
           other.port == this.port &&
@@ -691,12 +719,14 @@ class KnownDevice extends DataClass implements Insertable<KnownDevice> {
 }
 
 class KnownDevicesCompanion extends UpdateCompanion<KnownDevice> {
+  final Value<String> deviceId;
   final Value<String> ip;
   final Value<String> name;
   final Value<int> port;
   final Value<String> lastSeen;
   final Value<int> rowid;
   const KnownDevicesCompanion({
+    this.deviceId = const Value.absent(),
     this.ip = const Value.absent(),
     this.name = const Value.absent(),
     this.port = const Value.absent(),
@@ -704,6 +734,7 @@ class KnownDevicesCompanion extends UpdateCompanion<KnownDevice> {
     this.rowid = const Value.absent(),
   });
   KnownDevicesCompanion.insert({
+    this.deviceId = const Value.absent(),
     required String ip,
     required String name,
     required int port,
@@ -714,6 +745,7 @@ class KnownDevicesCompanion extends UpdateCompanion<KnownDevice> {
         port = Value(port),
         lastSeen = Value(lastSeen);
   static Insertable<KnownDevice> custom({
+    Expression<String>? deviceId,
     Expression<String>? ip,
     Expression<String>? name,
     Expression<int>? port,
@@ -721,6 +753,7 @@ class KnownDevicesCompanion extends UpdateCompanion<KnownDevice> {
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
+      if (deviceId != null) 'device_id': deviceId,
       if (ip != null) 'ip': ip,
       if (name != null) 'name': name,
       if (port != null) 'port': port,
@@ -730,12 +763,14 @@ class KnownDevicesCompanion extends UpdateCompanion<KnownDevice> {
   }
 
   KnownDevicesCompanion copyWith(
-      {Value<String>? ip,
+      {Value<String>? deviceId,
+      Value<String>? ip,
       Value<String>? name,
       Value<int>? port,
       Value<String>? lastSeen,
       Value<int>? rowid}) {
     return KnownDevicesCompanion(
+      deviceId: deviceId ?? this.deviceId,
       ip: ip ?? this.ip,
       name: name ?? this.name,
       port: port ?? this.port,
@@ -747,6 +782,9 @@ class KnownDevicesCompanion extends UpdateCompanion<KnownDevice> {
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
+    if (deviceId.present) {
+      map['device_id'] = Variable<String>(deviceId.value);
+    }
     if (ip.present) {
       map['ip'] = Variable<String>(ip.value);
     }
@@ -768,6 +806,7 @@ class KnownDevicesCompanion extends UpdateCompanion<KnownDevice> {
   @override
   String toString() {
     return (StringBuffer('KnownDevicesCompanion(')
+          ..write('deviceId: $deviceId, ')
           ..write('ip: $ip, ')
           ..write('name: $name, ')
           ..write('port: $port, ')
@@ -1032,6 +1071,7 @@ typedef $$MessagesTableProcessedTableManager = ProcessedTableManager<
     PrefetchHooks Function()>;
 typedef $$KnownDevicesTableCreateCompanionBuilder = KnownDevicesCompanion
     Function({
+  Value<String> deviceId,
   required String ip,
   required String name,
   required int port,
@@ -1040,6 +1080,7 @@ typedef $$KnownDevicesTableCreateCompanionBuilder = KnownDevicesCompanion
 });
 typedef $$KnownDevicesTableUpdateCompanionBuilder = KnownDevicesCompanion
     Function({
+  Value<String> deviceId,
   Value<String> ip,
   Value<String> name,
   Value<int> port,
@@ -1056,6 +1097,9 @@ class $$KnownDevicesTableFilterComposer
     super.$addJoinBuilderToRootComposer,
     super.$removeJoinBuilderFromRootComposer,
   });
+  ColumnFilters<String> get deviceId => $composableBuilder(
+      column: $table.deviceId, builder: (column) => ColumnFilters(column));
+
   ColumnFilters<String> get ip => $composableBuilder(
       column: $table.ip, builder: (column) => ColumnFilters(column));
 
@@ -1078,6 +1122,9 @@ class $$KnownDevicesTableOrderingComposer
     super.$addJoinBuilderToRootComposer,
     super.$removeJoinBuilderFromRootComposer,
   });
+  ColumnOrderings<String> get deviceId => $composableBuilder(
+      column: $table.deviceId, builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<String> get ip => $composableBuilder(
       column: $table.ip, builder: (column) => ColumnOrderings(column));
 
@@ -1100,6 +1147,9 @@ class $$KnownDevicesTableAnnotationComposer
     super.$addJoinBuilderToRootComposer,
     super.$removeJoinBuilderFromRootComposer,
   });
+  GeneratedColumn<String> get deviceId =>
+      $composableBuilder(column: $table.deviceId, builder: (column) => column);
+
   GeneratedColumn<String> get ip =>
       $composableBuilder(column: $table.ip, builder: (column) => column);
 
@@ -1139,6 +1189,7 @@ class $$KnownDevicesTableTableManager extends RootTableManager<
           createComputedFieldComposer: () =>
               $$KnownDevicesTableAnnotationComposer($db: db, $table: table),
           updateCompanionCallback: ({
+            Value<String> deviceId = const Value.absent(),
             Value<String> ip = const Value.absent(),
             Value<String> name = const Value.absent(),
             Value<int> port = const Value.absent(),
@@ -1146,6 +1197,7 @@ class $$KnownDevicesTableTableManager extends RootTableManager<
             Value<int> rowid = const Value.absent(),
           }) =>
               KnownDevicesCompanion(
+            deviceId: deviceId,
             ip: ip,
             name: name,
             port: port,
@@ -1153,6 +1205,7 @@ class $$KnownDevicesTableTableManager extends RootTableManager<
             rowid: rowid,
           ),
           createCompanionCallback: ({
+            Value<String> deviceId = const Value.absent(),
             required String ip,
             required String name,
             required int port,
@@ -1160,6 +1213,7 @@ class $$KnownDevicesTableTableManager extends RootTableManager<
             Value<int> rowid = const Value.absent(),
           }) =>
               KnownDevicesCompanion.insert(
+            deviceId: deviceId,
             ip: ip,
             name: name,
             port: port,

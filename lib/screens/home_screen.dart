@@ -28,10 +28,12 @@ class _HomeScreenState extends State<HomeScreen> {
   StreamSubscription? _msgSub;
   StreamSubscription? _fileSub;
   StreamSubscription? _onlineSub;
+  StreamSubscription? _seenSub;
 
   final Map<String, int> _unread = {};
   final Map<String, String> _lastMessage = {};
   final Map<String, String> _lastMessageTime = {};
+  final Map<String, String> _lastReadMessageId = {};
   OverlayEntry? _bannerEntry;
 
   @override
@@ -44,10 +46,16 @@ class _HomeScreenState extends State<HomeScreen> {
     final user = context.read<UserProvider>();
     _chat = ChatService();
     await _chat.startServer(user.name, user.localIp);
-    await _discovery.start(user.name, user.avatar, user.localIp, _chat.db);
+    await _discovery.start(user.name, user.avatar, user.localIp, _chat.db, user.deviceId);
 
     _discovery.devicesStream.listen((devices) {
-      if (mounted) setState(() => _devices = devices);
+      if (!mounted) return;
+      setState(() => _devices = devices);
+      for (final d in devices) {
+        if (!_lastMessage.containsKey(d.ip)) {
+          _loadLastMessage(d.ip);
+        }
+      }
     });
 
     _onlineSub = _discovery.onlineStream.listen((onlineIps) {
@@ -61,13 +69,18 @@ class _HomeScreenState extends State<HomeScreen> {
 
     _msgSub = _chat.messageStream.listen((msg) {
       if (!msg.isMe) {
+        final isActiveChat = _chat.activeChatIp == msg.senderIp;
         setState(() {
-          _unread[msg.senderIp] = (_unread[msg.senderIp] ?? 0) + 1;
+          if (!isActiveChat) {
+            _unread[msg.senderIp] = (_unread[msg.senderIp] ?? 0) + 1;
+          }
           _updateLastMessage(msg.senderIp, msg);
         });
-        _showBanner(msg.senderName,
-            msg.type == MessageType.code ? '📎 code snippet' : msg.content,
-            msg.senderIp);
+        if (!isActiveChat) {
+          _showBanner(msg.senderName,
+              msg.type == MessageType.code ? '📎 code snippet' : msg.content,
+              msg.senderIp);
+        }
       } else {
         setState(() => _updateLastMessage(msg.senderIp, msg));
       }
@@ -75,26 +88,29 @@ class _HomeScreenState extends State<HomeScreen> {
 
     _fileSub = _chat.fileStream.listen((msg) {
       if (!msg.isMe) {
+        final isActiveChat = _chat.activeChatIp == msg.senderIp;
         setState(() {
-          _unread[msg.senderIp] = (_unread[msg.senderIp] ?? 0) + 1;
+          if (!isActiveChat) {
+            _unread[msg.senderIp] = (_unread[msg.senderIp] ?? 0) + 1;
+          }
           _updateLastMessage(msg.senderIp, msg);
         });
-        _showBanner(msg.senderName, '📁 ${msg.content}', msg.senderIp);
+        if (!isActiveChat) {
+          _showBanner(msg.senderName, '📁 ${msg.content}', msg.senderIp);
+        }
       } else {
         setState(() => _updateLastMessage(msg.isMe ? msg.senderIp : msg.senderIp, msg));
       }
     });
 
+    _seenSub = _chat.seenStream.listen((peerIp) {
+      if (!mounted) return;
+      setState(() => _unread.remove(peerIp));
+    });
+
     if (mounted) setState(() => _started = true);
 
-    // load last messages after devices loaded
-    _discovery.devicesStream.listen((devices) {
-      for (final d in devices) {
-        if (!_lastMessage.containsKey(d.ip)) {
-          _loadLastMessage(d.ip);
-        }
-      }
-    });
+
   }
 
   Future<void> _loadLastMessage(String peerIp) async {
@@ -179,19 +195,37 @@ class _HomeScreenState extends State<HomeScreen> {
     _msgSub?.cancel();
     _fileSub?.cancel();
     _onlineSub?.cancel();
+    _seenSub?.cancel();
     _discovery.dispose();
     _chat.dispose();
     super.dispose();
   }
 
   void _openChat(DiscoveredDevice device) {
+    final unreadCount = _unread[device.ip] ?? 0;
+
+    // snapshot last read position before opening
+    final cached = _chat.getCachedMessages(device.ip);
+    if (cached.isNotEmpty) {
+      _lastReadMessageId[device.ip] = cached.last.id;
+    }
+
     setState(() => _unread.remove(device.ip));
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => ChatScreen(device: device, chatService: _chat),
+        builder: (_) => ChatScreen(
+          device: device,
+          chatService: _chat,
+          initialUnreadCount: unreadCount,
+          lastReadMessageId: _lastReadMessageId[device.ip],
+        ),
       ),
-    ).then((_) => _loadLastMessage(device.ip));
+    ).then((_) {
+      if (!mounted) return;
+      setState(() => _unread.remove(device.ip));
+      _loadLastMessage(device.ip);
+    });
   }
 
   void _openProfile() {
@@ -344,13 +378,75 @@ class _HomeScreenState extends State<HomeScreen> {
                         itemCount: _devices.length,
                         itemBuilder: (_, i) {
                           final device = _devices[i];
-                          return DeviceTile(
-                            device: device,
-                            unreadCount: _unread[device.ip] ?? 0,
-                            isOnline: _onlineIps.contains(device.ip),
-                            lastMessage: _lastMessage[device.ip],
-                            lastMessageTime: _lastMessageTime[device.ip],
-                            onTap: () => _openChat(device),
+                          return Dismissible(
+                            key: Key(device.ip),
+                            direction: DismissDirection.endToStart,
+                            background: Container(
+                              margin: const EdgeInsets.symmetric(
+                                  horizontal: 16, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFFF6B6B).withOpacity(0.15),
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                              alignment: Alignment.centerRight,
+                              padding: const EdgeInsets.only(right: 20),
+                              child: const Icon(Icons.delete_sweep_rounded,
+                                  color: Color(0xFFFF6B6B), size: 22),
+                            ),
+                            confirmDismiss: (_) async {
+                              return await showDialog<bool>(
+                                context: context,
+                                builder: (_) => AlertDialog(
+                                  backgroundColor: const Color(0xFF1A1A1A),
+                                  shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(14)),
+                                  title: Text('remove ${device.name}?',
+                                      style: GoogleFonts.spaceGrotesk(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.w700)),
+                                  content: Text(
+                                      'removes chat history and device from list.',
+                                      style: GoogleFonts.spaceGrotesk(
+                                          color: Colors.white54, fontSize: 13)),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () =>
+                                          Navigator.pop(context, false),
+                                      child: Text('cancel',
+                                          style: GoogleFonts.spaceGrotesk(
+                                              color: Colors.white38)),
+                                    ),
+                                    TextButton(
+                                      onPressed: () =>
+                                          Navigator.pop(context, true),
+                                      child: Text('remove',
+                                          style: GoogleFonts.spaceGrotesk(
+                                              color: const Color(0xFFFF6B6B),
+                                              fontWeight: FontWeight.w700)),
+                                    ),
+                                  ],
+                                ),
+                              ) ?? false;
+                            },
+                            onDismissed: (_) async {
+                              await _chat.db.deleteMessagesForPeer(device.ip);
+                              await _chat.db.deleteKnownDevice(device.ip);
+                              _chat.clearCache(device.ip);
+                              setState(() {
+                                _devices.removeWhere((d) => d.ip == device.ip);
+                                _unread.remove(device.ip);
+                                _lastMessage.remove(device.ip);
+                                _lastMessageTime.remove(device.ip);
+                              });
+                            },
+                            child: DeviceTile(
+                              device: device,
+                              unreadCount: _unread[device.ip] ?? 0,
+                              isOnline: _onlineIps.contains(device.ip),
+                              lastMessage: _lastMessage[device.ip],
+                              lastMessageTime: _lastMessageTime[device.ip],
+                              onTap: () => _openChat(device),
+                            ),
                           );
                         },
                       ),

@@ -4,6 +4,7 @@
 
 list(APPEND FLUTTER_PLUGIN_LIST
   desktop_drop
+  pdfx
   permission_handler_windows
   share_plus
   sqlite3_flutter_libs

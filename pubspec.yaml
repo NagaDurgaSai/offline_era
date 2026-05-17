@@ -21,11 +21,13 @@ dependencies:
   path_provider: ^2.1.0
   permission_handler: ^11.0.0
   open_filex: ^4.3.2
+  pdfx: ^2.6.0
   share_plus: ^10.0.0
   desktop_drop: ^0.4.0
   drift: ^2.18.0
   sqlite3_flutter_libs: ^0.5.0
   path: ^1.9.0
+  uuid: ^4.5.3
 
 dev_dependencies:
   flutter_test:

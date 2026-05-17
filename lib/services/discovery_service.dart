@@ -30,28 +30,32 @@ class DiscoveryService {
       return aOnline.compareTo(bOnline);
     });
 
-  Set<String> get onlineIps => _onlineDevices.keys.toSet();
+  Set<String> get onlineIps => _onlineDevices.values.map((d) => d.ip).toSet();
 
   String _myName = '';
   String _myAvatar = '';
   String _myIp = '';
+  String _myDeviceId = '';
   AppDatabase? _db;
 
-  Future<void> start(String name, String avatar, String myIp, AppDatabase db) async {
+  Future<void> start(String name, String avatar, String myIp, AppDatabase db, String deviceId) async {
     _myName = name;
     _myAvatar = avatar;
     _myIp = myIp;
+    _myDeviceId = deviceId;
     _db = db;
 
     // load known devices from db
     final known = await db.getAllKnownDevices();
     for (final d in known) {
-      _allDevices[d.ip] = DiscoveredDevice(
+      final key = d.deviceId.isNotEmpty ? d.deviceId : d.ip;
+      _allDevices[key] = DiscoveredDevice(
         name: d.name,
         avatar: '',
         ip: d.ip,
         port: d.port,
         lastSeen: DateTime.parse(d.lastSeen),
+        deviceId: d.deviceId,
       );
     }
     _devicesController.add(devices);
@@ -73,15 +77,17 @@ class DiscoveryService {
           final device = DiscoveredDevice.fromJson(data);
           if (device.ip == _myIp) return;
 
-          _onlineDevices[device.ip] = device;
-          _allDevices[device.ip] = device;
+          final key = device.deviceId.isNotEmpty ? device.deviceId : device.ip;
+          _onlineDevices[key] = device;
+          _allDevices[key] = device;
 
-          // persist to db
+          // persist to db — upsert by IP so IP updates don't create new rows
           _db?.upsertKnownDevice(KnownDevicesCompanion(
             ip: Value(device.ip),
             name: Value(device.name),
             port: Value(device.port),
             lastSeen: Value(device.lastSeen.toIso8601String()),
+            deviceId: Value(device.deviceId),
           ));
 
           _devicesController.add(devices);
@@ -108,6 +114,7 @@ class DiscoveryService {
       'avatar': _myAvatar,
       'ip': _myIp,
       'port': chatPort,
+      'deviceId': _myDeviceId,
     });
     final data = utf8.encode(payload);
     _socket!.send(data, InternetAddress('255.255.255.255'), discoveryPort);
@@ -118,7 +125,7 @@ class DiscoveryService {
     final toRemove = <String>[];
     for (final entry in _onlineDevices.entries) {
       if (now.difference(entry.value.lastSeen) > deviceTimeout + broadcastInterval) {
-        toRemove.add(entry.key);
+        toRemove.add(entry.key); // key is deviceId or ip
       }
     }
     if (toRemove.isNotEmpty) {
