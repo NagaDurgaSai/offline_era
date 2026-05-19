@@ -17,14 +17,14 @@ class DiscoveredDevice {
 
   String get id => deviceId.isNotEmpty ? deviceId : '$ip:$port';
 
-  DiscoveredDevice copyWith({DateTime? lastSeen, String? ip}) {
+  DiscoveredDevice copyWith({String? name, String? avatar, String? ip, int? port, DateTime? lastSeen, String? deviceId}) {
     return DiscoveredDevice(
-      name: name,
-      avatar: avatar,
+      name: name ?? this.name,
+      avatar: avatar ?? this.avatar,
       ip: ip ?? this.ip,
-      port: port,
+      port: port ?? this.port,
       lastSeen: lastSeen ?? this.lastSeen,
-      deviceId: deviceId,
+      deviceId: deviceId ?? this.deviceId,
     );
   }
 
@@ -57,4 +57,5 @@ class DiscoveredDevice {
   @override
   int get hashCode =>
       deviceId.isNotEmpty ? deviceId.hashCode : Object.hash(ip, port);
+
 }

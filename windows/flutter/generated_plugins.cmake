@@ -4,6 +4,7 @@
 
 list(APPEND FLUTTER_PLUGIN_LIST
   desktop_drop
+  local_auth_windows
   pdfx
   permission_handler_windows
   share_plus

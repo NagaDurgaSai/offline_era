@@ -32,6 +32,7 @@ class DiscoveryService {
 
   Set<String> get onlineIps => _onlineDevices.values.map((d) => d.ip).toSet();
 
+  final Set<String> _deletedIps = {};
   String _myName = '';
   String _myAvatar = '';
   String _myIp = '';
@@ -48,6 +49,7 @@ class DiscoveryService {
     // load known devices from db
     final known = await db.getAllKnownDevices();
     for (final d in known) {
+      if (_deletedIps.contains(d.ip)) continue;
       final key = d.deviceId.isNotEmpty ? d.deviceId : d.ip;
       _allDevices[key] = DiscoveredDevice(
         name: d.name,
@@ -77,7 +79,28 @@ class DiscoveryService {
           final device = DiscoveredDevice.fromJson(data);
           if (device.ip == _myIp) return;
 
+          // Ignore broadcasts from manually deleted devices
+          if (_deletedIps.contains(device.ip)) return;
+
           final key = device.deviceId.isNotEmpty ? device.deviceId : device.ip;
+
+          // If same IP exists under a different deviceId, remove the stale entry
+          // This happens when app is reinstalled (new deviceId, same IP)
+          if (device.deviceId.isNotEmpty) {
+            final stale = _allDevices.entries.where((e) =>
+              e.key != key &&
+              e.value.ip == device.ip
+            ).toList();
+            for (final s in stale) {
+              _allDevices.remove(s.key);
+              _onlineDevices.remove(s.key);
+              // remove stale db row by old deviceId
+              if (s.value.deviceId.isNotEmpty) {
+                _db?.deleteKnownDeviceByDeviceId(s.value.deviceId);
+              }
+            }
+          }
+
           _onlineDevices[key] = device;
           _allDevices[key] = device;
 
@@ -140,6 +163,88 @@ class DiscoveryService {
     _cleanupTimer?.cancel();
     _socket?.close();
     _socket = null;
+  }
+
+  /// Permanently remove a device — won't reappear from DB or broadcast
+  void removeDevice(String ip) {
+    _deletedIps.add(ip);
+    // Remove from in-memory maps
+    _allDevices.removeWhere((_, d) => d.ip == ip);
+    _onlineDevices.removeWhere((_, d) => d.ip == ip);
+    _devicesController.add(devices);
+    _onlineController.add(onlineIps);
+  }
+
+  /// Manually connect to a device by IP.
+  /// Sends our identity via UDP directly to that IP (bypasses subnet broadcast).
+  /// Returns the device name if already known, IP string if new, null on failure.
+  Future<String?> manualConnect(String ip) async {
+    try {
+      // 1. Verify the device is reachable on the chat port
+      final socket = await Socket.connect(
+        ip, chatPort,
+        timeout: const Duration(seconds: 3),
+      );
+      socket.destroy();
+
+      // 2. Send our identity packet directly to their UDP port
+      //    This is how discovery works — we just aim it at a specific IP
+      //    instead of the broadcast address. They will receive it and add us.
+      if (_socket != null) {
+        final payload = jsonEncode({
+          'name': _myName,
+          'avatar': _myAvatar,
+          'ip': _myIp,
+          'port': chatPort,
+          'deviceId': _myDeviceId,
+        });
+        final data = utf8.encode(payload);
+        // Send several times to improve reliability
+        for (int i = 0; i < 3; i++) {
+          _socket!.send(data, InternetAddress(ip), discoveryPort);
+          await Future.delayed(const Duration(milliseconds: 100));
+        }
+      }
+
+      // 3. If already known, mark online and return name
+      final existing = _allDevices.values.where((d) => d.ip == ip).toList();
+      if (existing.isNotEmpty) {
+        final dev = existing.first;
+        final key = dev.deviceId.isNotEmpty ? dev.deviceId : dev.ip;
+        _onlineDevices[key] = dev.copyWith(lastSeen: DateTime.now());
+        _devicesController.add(devices);
+        _onlineController.add(onlineIps);
+        return dev.name;
+      }
+
+      // 4. Unknown — add placeholder; their reply broadcast will fill real details
+      final placeholder = DiscoveredDevice(
+        name: ip,
+        avatar: '',
+        ip: ip,
+        port: chatPort,
+        lastSeen: DateTime.now(),
+        deviceId: '',
+      );
+      _onlineDevices[ip] = placeholder;
+      _allDevices[ip] = placeholder;
+      _db?.upsertKnownDevice(KnownDevicesCompanion(
+        ip: Value(ip),
+        name: Value(ip),
+        port: Value(chatPort),
+        lastSeen: Value(DateTime.now().toIso8601String()),
+        deviceId: const Value(''),
+      ));
+      _devicesController.add(devices);
+      _onlineController.add(onlineIps);
+
+      // 5. Wait up to 3s for them to reply with their real identity
+      await Future.delayed(const Duration(seconds: 3));
+      final updated = _allDevices.values.where((d) => d.ip == ip).toList();
+      return updated.isNotEmpty ? updated.first.name : ip;
+    } catch (_) {
+      return null;
+    }
   }
 
   void dispose() {

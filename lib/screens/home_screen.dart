@@ -228,6 +228,118 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
+  Future<void> _showManualConnectDialog() async {
+    final ipController = TextEditingController();
+    String? errorMsg;
+
+    await showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          backgroundColor: const Color(0xFF1A1A1A),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Text('connect by IP',
+              style: GoogleFonts.spaceGrotesk(
+                  color: Colors.white, fontWeight: FontWeight.w700)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                "enter the device's local IP address",
+                style: GoogleFonts.spaceGrotesk(fontSize: 13, color: Colors.white54),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: ipController,
+                autofocus: true,
+                keyboardType: TextInputType.number,
+                style: GoogleFonts.spaceGrotesk(color: Colors.white),
+                cursorColor: const Color(0xFFB8FF57),
+                decoration: InputDecoration(
+                  hintText: '192.168.x.x',
+                  hintStyle: GoogleFonts.spaceGrotesk(color: Colors.white24),
+                  filled: true,
+                  fillColor: Colors.white.withOpacity(0.06),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide.none,
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: Color(0xFFB8FF57), width: 1),
+                  ),
+                  errorText: errorMsg,
+                  errorStyle: GoogleFonts.spaceGrotesk(color: Colors.redAccent),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: Text('cancel',
+                  style: GoogleFonts.spaceGrotesk(color: Colors.white38)),
+            ),
+            TextButton(
+              onPressed: () async {
+                final ip = ipController.text.trim();
+                if (ip.isEmpty) {
+                  setDialogState(() => errorMsg = 'enter an IP');
+                  return;
+                }
+                final parts = ip.split('.');
+                if (parts.length != 4 ||
+                    parts.any((p) => int.tryParse(p) == null)) {
+                  setDialogState(() => errorMsg = 'invalid IP format');
+                  return;
+                }
+                Navigator.pop(ctx);
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('connecting to \$ip...',
+                        style: GoogleFonts.spaceGrotesk()),
+                    backgroundColor: const Color(0xFF1A1A1A),
+                    behavior: SnackBarBehavior.floating,
+                    duration: const Duration(seconds: 4),
+                  ),
+                );
+                final result = await _discovery.manualConnect(ip);
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                if (result != null) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('connected to \$result',
+                          style: GoogleFonts.spaceGrotesk()),
+                      backgroundColor: const Color(0xFF1A1A1A),
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('could not reach \$ip — is the app open there?',
+                          style: GoogleFonts.spaceGrotesk()),
+                      backgroundColor: Colors.red.shade900,
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                }
+              },
+              child: Text('connect',
+                  style: GoogleFonts.spaceGrotesk(
+                      color: const Color(0xFFB8FF57),
+                      fontWeight: FontWeight.w700)),
+            ),
+          ],
+        ),
+      ),
+    );
+    ipController.dispose();
+  }
+
   void _openProfile() {
     Navigator.push(
       context,
@@ -286,6 +398,25 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ),
+      floatingActionButton: _started
+          ? FloatingActionButton(
+              onPressed: _showManualConnectDialog,
+              backgroundColor: const Color(0xFF1A1A1A),
+              elevation: 4,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+                side: BorderSide(
+                  color: const Color(0xFFB8FF57).withOpacity(0.4),
+                  width: 1,
+                ),
+              ),
+              child: const Icon(
+                Icons.person_add_alt_1_rounded,
+                color: Color(0xFFB8FF57),
+                size: 22,
+              ),
+            )
+          : null,
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -432,6 +563,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               await _chat.db.deleteMessagesForPeer(device.ip);
                               await _chat.db.deleteKnownDevice(device.ip);
                               _chat.clearCache(device.ip);
+                              _discovery.removeDevice(device.ip);
                               setState(() {
                                 _devices.removeWhere((d) => d.ip == device.ip);
                                 _unread.remove(device.ip);
