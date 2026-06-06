@@ -1,10 +1,7 @@
 import 'dart:async';
 import 'package:desktop_drop/desktop_drop.dart';
-import 'package:desktop_drop/desktop_drop.dart';
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -14,10 +11,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:pdfx/pdfx.dart';
 import 'package:share_plus/share_plus.dart' show Share, XFile;
-import 'package:provider/provider.dart';
 import '../models/device.dart';
 import '../models/message.dart';
-import '../providers/user_provider.dart';
 import '../services/chat_service.dart';
 
 class ChatScreen extends StatefulWidget {
@@ -67,17 +62,22 @@ class _ChatScreenState extends State<ChatScreen>
         setState(() {
           _messages = List.from(msgs);
           final chatMsgs = _messages
-              .where((m) =>
-                  m.type == MessageType.text || m.type == MessageType.code)
+              .where(
+                (m) => m.type == MessageType.text || m.type == MessageType.code,
+              )
               .toList();
           final chatCount = chatMsgs.length;
           if (widget.initialUnreadCount > 0 && chatCount > 0) {
             // fresh unreads — jump to first unread
-            _firstNewChatIndex =
-                (chatCount - widget.initialUnreadCount).clamp(0, chatCount - 1);
+            _firstNewChatIndex = (chatCount - widget.initialUnreadCount).clamp(
+              0,
+              chatCount - 1,
+            );
           } else if (widget.lastReadMessageId != null && chatCount > 0) {
             // returning after reading — jump just past last read message
-            final idx = chatMsgs.indexWhere((m) => m.id == widget.lastReadMessageId);
+            final idx = chatMsgs.indexWhere(
+              (m) => m.id == widget.lastReadMessageId,
+            );
             if (idx != -1 && idx < chatCount - 1) {
               _firstNewChatIndex = idx + 1;
             } else {
@@ -147,13 +147,11 @@ class _ChatScreenState extends State<ChatScreen>
     if (_firstNewChatIndex != null) {
       final markerContext = _chatItemKeys[_firstNewChatIndex!]?.currentContext;
       if (markerContext != null) {
-        final box = markerContext.findRenderObject() as RenderBox?;
+        final box = markerContext.findRenderObject() as RenderBox;
         final viewport = RenderAbstractViewport.of(box);
-        if (box != null && viewport != null) {
-          final reveal = viewport.getOffsetToReveal(box, 0).offset;
-          if (_scrollController.offset >= reveal - 8) {
-            setState(() => _firstNewChatIndex = null);
-          }
+        final reveal = viewport.getOffsetToReveal(box, 0).offset;
+        if (_scrollController.offset >= reveal - 8) {
+          setState(() => _firstNewChatIndex = null);
         }
       }
     }
@@ -172,12 +170,15 @@ class _ChatScreenState extends State<ChatScreen>
       if (!mounted || !_scrollController.hasClients) return;
 
       final chatCount = _messages
-          .where((m) => m.type == MessageType.text || m.type == MessageType.code)
+          .where(
+            (m) => m.type == MessageType.text || m.type == MessageType.code,
+          )
           .length;
       if (chatCount <= 1) return;
 
       final ratio = index / (chatCount - 1);
-      final estimatedOffset = _scrollController.position.maxScrollExtent * ratio;
+      final estimatedOffset =
+          _scrollController.position.maxScrollExtent * ratio;
       _scrollController.jumpTo(
         estimatedOffset.clamp(
           _scrollController.position.minScrollExtent,
@@ -215,33 +216,39 @@ class _ChatScreenState extends State<ChatScreen>
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              width: 36, height: 4,
+              width: 36,
+              height: 4,
               decoration: BoxDecoration(
-                  color: Colors.white24,
-                  borderRadius: BorderRadius.circular(2)),
+                color: Colors.white24,
+                borderRadius: BorderRadius.circular(2),
+              ),
             ),
             const SizedBox(height: 20),
             Row(
               children: [
-                Expanded(child: _pickerTile(
-                  icon: Icons.text_fields_rounded,
-                  label: 'plain text',
-                  selected: _inputMode == MessageType.text,
-                  onTap: () {
-                    setState(() => _inputMode = MessageType.text);
-                    Navigator.pop(context);
-                  },
-                )),
+                Expanded(
+                  child: _pickerTile(
+                    icon: Icons.text_fields_rounded,
+                    label: 'plain text',
+                    selected: _inputMode == MessageType.text,
+                    onTap: () {
+                      setState(() => _inputMode = MessageType.text);
+                      Navigator.pop(context);
+                    },
+                  ),
+                ),
                 const SizedBox(width: 12),
-                Expanded(child: _pickerTile(
-                  icon: Icons.code_rounded,
-                  label: 'code',
-                  selected: _inputMode == MessageType.code,
-                  onTap: () {
-                    setState(() => _inputMode = MessageType.code);
-                    Navigator.pop(context);
-                  },
-                )),
+                Expanded(
+                  child: _pickerTile(
+                    icon: Icons.code_rounded,
+                    label: 'code',
+                    selected: _inputMode == MessageType.code,
+                    onTap: () {
+                      setState(() => _inputMode = MessageType.code);
+                      Navigator.pop(context);
+                    },
+                  ),
+                ),
               ],
             ),
           ],
@@ -272,16 +279,20 @@ class _ChatScreenState extends State<ChatScreen>
         ),
         child: Column(
           children: [
-            Icon(icon, size: 28,
-                color: selected ? const Color(0xFFB8FF57) : Colors.white38),
+            Icon(
+              icon,
+              size: 28,
+              color: selected ? const Color(0xFFB8FF57) : Colors.white38,
+            ),
             const SizedBox(height: 8),
-            Text(label,
-                style: GoogleFonts.spaceGrotesk(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: selected
-                        ? const Color(0xFFB8FF57)
-                        : Colors.white38)),
+            Text(
+              label,
+              style: GoogleFonts.spaceGrotesk(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: selected ? const Color(0xFFB8FF57) : Colors.white38,
+              ),
+            ),
           ],
         ),
       ),
@@ -305,7 +316,9 @@ class _ChatScreenState extends State<ChatScreen>
     print("DEBUG: picker result = \${result?.files.length} files");
     if (result == null || result.files.isEmpty) return;
     final pf = result.files.first;
-    print("DEBUG: file name=\${pf.name} path=\${pf.path} bytes=\${pf.bytes?.length}");
+    print(
+      "DEBUG: file name=\${pf.name} path=\${pf.path} bytes=\${pf.bytes?.length}",
+    );
     Uint8List? bytes;
     if (pf.bytes != null) {
       bytes = pf.bytes!;
@@ -347,16 +360,34 @@ class _ChatScreenState extends State<ChatScreen>
       builder: (_) => AlertDialog(
         backgroundColor: const Color(0xFF1A1A1A),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        title: Text('clear chat?', style: GoogleFonts.spaceGrotesk(color: Colors.white, fontWeight: FontWeight.w700)),
-        content: Text('removes all messages and files. cannot be undone.', style: GoogleFonts.spaceGrotesk(color: Colors.white54, fontSize: 13)),
+        title: Text(
+          'clear chat?',
+          style: GoogleFonts.spaceGrotesk(
+            color: Colors.white,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        content: Text(
+          'removes all messages and files. cannot be undone.',
+          style: GoogleFonts.spaceGrotesk(color: Colors.white54, fontSize: 13),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: Text('cancel', style: GoogleFonts.spaceGrotesk(color: Colors.white38)),
+            child: Text(
+              'cancel',
+              style: GoogleFonts.spaceGrotesk(color: Colors.white38),
+            ),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: Text('clear', style: GoogleFonts.spaceGrotesk(color: const Color(0xFFFF6B6B), fontWeight: FontWeight.w700)),
+            child: Text(
+              'clear',
+              style: GoogleFonts.spaceGrotesk(
+                color: const Color(0xFFFF6B6B),
+                fontWeight: FontWeight.w700,
+              ),
+            ),
           ),
         ],
       ),
@@ -380,12 +411,16 @@ class _ChatScreenState extends State<ChatScreen>
     if (Platform.isMacOS) {
       // show in Finder
       final dir = msg.savedPath!.substring(
-          0, msg.savedPath!.lastIndexOf(Platform.pathSeparator));
+        0,
+        msg.savedPath!.lastIndexOf(Platform.pathSeparator),
+      );
       await Process.run('open', [dir]);
     } else if (Platform.isWindows) {
       // save to Downloads on Windows — file already there, open folder
       final dir = msg.savedPath!.substring(
-          0, msg.savedPath!.lastIndexOf(Platform.pathSeparator));
+        0,
+        msg.savedPath!.lastIndexOf(Platform.pathSeparator),
+      );
       await Process.run('explorer', [dir]);
     } else {
       // Android — save as dialog
@@ -415,8 +450,10 @@ class _ChatScreenState extends State<ChatScreen>
     if (result.type == ResultType.noAppToOpen && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('no app found to open this file',
-              style: GoogleFonts.spaceGrotesk()),
+          content: Text(
+            'no app found to open this file',
+            style: GoogleFonts.spaceGrotesk(),
+          ),
           backgroundColor: const Color(0xFF1A1A1A),
           behavior: SnackBarBehavior.floating,
         ),
@@ -429,8 +466,7 @@ class _ChatScreenState extends State<ChatScreen>
     return ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'].contains(ext);
   }
 
-  bool _isPdf(String name) =>
-      name.split('.').last.toLowerCase() == 'pdf';
+  bool _isPdf(String name) => name.split('.').last.toLowerCase() == 'pdf';
 
   String _formatTime(DateTime t) =>
       '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
@@ -455,8 +491,11 @@ class _ChatScreenState extends State<ChatScreen>
     final name = msg.fileName ?? msg.content;
     final isImg = _isImage(name);
     final isPdf = _isPdf(name);
-    final size = msg.fileBytes != null ? _formatSize(msg.fileBytes!.length) : '';
-    final isDesktop = Platform.isMacOS || Platform.isWindows || Platform.isLinux;
+    final size = msg.fileBytes != null
+        ? _formatSize(msg.fileBytes!.length)
+        : '';
+    final isDesktop =
+        Platform.isMacOS || Platform.isWindows || Platform.isLinux;
 
     return Align(
       alignment: msg.isMe ? Alignment.centerRight : Alignment.centerLeft,
@@ -490,7 +529,9 @@ class _ChatScreenState extends State<ChatScreen>
               GestureDetector(
                 onTap: () => _openFile(msg),
                 child: ClipRRect(
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(10)),
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(10),
+                  ),
                   child: _PdfPreview(bytes: msg.fileBytes!),
                 ),
               ),
@@ -502,8 +543,11 @@ class _ChatScreenState extends State<ChatScreen>
                   height: 200,
                   color: const Color(0xFFFF6B6B).withOpacity(0.07),
                   child: const Center(
-                    child: Icon(Icons.picture_as_pdf_rounded,
-                        color: Color(0xFFFF6B6B), size: 48),
+                    child: Icon(
+                      Icons.picture_as_pdf_rounded,
+                      color: Color(0xFFFF6B6B),
+                      size: 48,
+                    ),
                   ),
                 ),
               ),
@@ -519,22 +563,22 @@ class _ChatScreenState extends State<ChatScreen>
                       color: isImg
                           ? const Color(0xFFB8FF57).withOpacity(0.1)
                           : isPdf
-                              ? const Color(0xFFFF6B6B).withOpacity(0.1)
-                              : Colors.white.withOpacity(0.06),
+                          ? const Color(0xFFFF6B6B).withOpacity(0.1)
+                          : Colors.white.withOpacity(0.06),
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Icon(
                       isImg
                           ? Icons.image_rounded
                           : isPdf
-                              ? Icons.picture_as_pdf_rounded
-                              : Icons.insert_drive_file_rounded,
+                          ? Icons.picture_as_pdf_rounded
+                          : Icons.insert_drive_file_rounded,
                       size: 14,
                       color: isImg
                           ? const Color(0xFFB8FF57)
                           : isPdf
-                              ? const Color(0xFFFF6B6B)
-                              : Colors.white38,
+                          ? const Color(0xFFFF6B6B)
+                          : Colors.white38,
                     ),
                   ),
                   const SizedBox(width: 7),
@@ -554,15 +598,22 @@ class _ChatScreenState extends State<ChatScreen>
                           ),
                         ),
                         if (size.isNotEmpty)
-                          Text(size,
-                              style: GoogleFonts.spaceGrotesk(
-                                  fontSize: 10, color: Colors.white38)),
+                          Text(
+                            size,
+                            style: GoogleFonts.spaceGrotesk(
+                              fontSize: 10,
+                              color: Colors.white38,
+                            ),
+                          ),
                       ],
                     ),
                   ),
                   if (msg.isMe)
-                    const Icon(Icons.check_rounded,
-                        size: 12, color: Colors.white24),
+                    const Icon(
+                      Icons.check_rounded,
+                      size: 12,
+                      color: Colors.white24,
+                    ),
                 ],
               ),
             ),
@@ -635,7 +686,8 @@ class _ChatScreenState extends State<ChatScreen>
             builder: (context, setLocal2) => Container(
               margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
               constraints: BoxConstraints(
-                  maxWidth: MediaQuery.of(context).size.width * 0.82),
+                maxWidth: MediaQuery.of(context).size.width * 0.82,
+              ),
               decoration: BoxDecoration(
                 color: const Color(0xFF1A1A1A),
                 borderRadius: BorderRadius.circular(12),
@@ -646,24 +698,37 @@ class _ChatScreenState extends State<ChatScreen>
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
                     color: Colors.white.withOpacity(0.04),
                     child: Row(
                       children: [
-                        const Icon(Icons.code_rounded,
-                            size: 12, color: Color(0xFFB8FF57)),
+                        const Icon(
+                          Icons.code_rounded,
+                          size: 12,
+                          color: Color(0xFFB8FF57),
+                        ),
                         const SizedBox(width: 6),
-                        Text('code · ${lines.length} lines',
-                            style: GoogleFonts.spaceGrotesk(
-                                fontSize: 11,
-                                color: const Color(0xFFB8FF57),
-                                fontWeight: FontWeight.w600)),
+                        Text(
+                          'code · ${lines.length} lines',
+                          style: GoogleFonts.spaceGrotesk(
+                            fontSize: 11,
+                            color: const Color(0xFFB8FF57),
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                         const Spacer(),
                         GestureDetector(
                           onTap: () => Clipboard.setData(
-                              ClipboardData(text: msg.content)),
-                          child: const Icon(Icons.copy_rounded,
-                              size: 14, color: Colors.white38),
+                            ClipboardData(text: msg.content),
+                          ),
+                          child: const Icon(
+                            Icons.copy_rounded,
+                            size: 14,
+                            color: Colors.white38,
+                          ),
                         ),
                       ],
                     ),
@@ -691,9 +756,10 @@ class _ChatScreenState extends State<ChatScreen>
                                 ? 'show less ↑'
                                 : 'show ${lines.length - 5} more lines ↓',
                             style: GoogleFonts.spaceGrotesk(
-                                fontSize: 11,
-                                color: const Color(0xFFB8FF57),
-                                fontWeight: FontWeight.w600),
+                              fontSize: 11,
+                              color: const Color(0xFFB8FF57),
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ),
                       ),
@@ -714,15 +780,15 @@ class _ChatScreenState extends State<ChatScreen>
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
         constraints: BoxConstraints(
-            maxWidth: MediaQuery.of(context).size.width * 0.78),
+          maxWidth: MediaQuery.of(context).size.width * 0.78,
+        ),
         child: Column(
           crossAxisAlignment: msg.isMe
               ? CrossAxisAlignment.end
               : CrossAxisAlignment.start,
           children: [
             Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
                 color: msg.isMe
                     ? const Color(0xFFB8FF57)
@@ -737,31 +803,34 @@ class _ChatScreenState extends State<ChatScreen>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  Text(msg.content,
-                      style: GoogleFonts.spaceGrotesk(
-                          fontSize: 15,
-                          color:
-                              msg.isMe ? Colors.black : Colors.white)),
+                  Text(
+                    msg.content,
+                    style: GoogleFonts.spaceGrotesk(
+                      fontSize: 15,
+                      color: msg.isMe ? Colors.black : Colors.white,
+                    ),
+                  ),
                   if (isLong) ...[
                     const SizedBox(height: 6),
                     GestureDetector(
-                      onTap: () => Clipboard.setData(
-                          ClipboardData(text: msg.content)),
+                      onTap: () =>
+                          Clipboard.setData(ClipboardData(text: msg.content)),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.copy_rounded,
-                              size: 12,
-                              color: msg.isMe
-                                  ? Colors.black54
-                                  : Colors.white38),
+                          Icon(
+                            Icons.copy_rounded,
+                            size: 12,
+                            color: msg.isMe ? Colors.black54 : Colors.white38,
+                          ),
                           const SizedBox(width: 4),
-                          Text('copy',
-                              style: GoogleFonts.spaceGrotesk(
-                                  fontSize: 11,
-                                  color: msg.isMe
-                                      ? Colors.black54
-                                      : Colors.white38)),
+                          Text(
+                            'copy',
+                            style: GoogleFonts.spaceGrotesk(
+                              fontSize: 11,
+                              color: msg.isMe ? Colors.black54 : Colors.white38,
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -773,15 +842,22 @@ class _ChatScreenState extends State<ChatScreen>
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(_formatTime(msg.timestamp),
-                    style: GoogleFonts.spaceGrotesk(
-                        fontSize: 10, color: Colors.white24)),
+                Text(
+                  _formatTime(msg.timestamp),
+                  style: GoogleFonts.spaceGrotesk(
+                    fontSize: 10,
+                    color: Colors.white24,
+                  ),
+                ),
                 if (msg.isMe && _seenByPeer && _isLastSentMessage(msg)) ...[
                   const SizedBox(width: 4),
-                  Text('seen',
-                      style: GoogleFonts.spaceGrotesk(
-                          fontSize: 10,
-                          color: const Color(0xFFB8FF57).withOpacity(0.7))),
+                  Text(
+                    'seen',
+                    style: GoogleFonts.spaceGrotesk(
+                      fontSize: 10,
+                      color: const Color(0xFFB8FF57).withOpacity(0.7),
+                    ),
+                  ),
                 ],
               ],
             ),
@@ -793,16 +869,18 @@ class _ChatScreenState extends State<ChatScreen>
 
   bool _isLastSentMessage(ChatMessage msg) {
     final sentMsgs = _messages
-        .where((m) => m.isMe &&
-            (m.type == MessageType.text || m.type == MessageType.code))
+        .where(
+          (m) =>
+              m.isMe &&
+              (m.type == MessageType.text || m.type == MessageType.code),
+        )
         .toList();
     return sentMsgs.isNotEmpty && sentMsgs.last.id == msg.id;
   }
 
   Widget _buildChatTab() {
     final chatMsgs = _messages
-        .where((m) =>
-            m.type == MessageType.text || m.type == MessageType.code)
+        .where((m) => m.type == MessageType.text || m.type == MessageType.code)
         .toList();
     return Column(
       children: [
@@ -812,16 +890,23 @@ class _ChatScreenState extends State<ChatScreen>
               Positioned.fill(
                 child: chatMsgs.isEmpty
                     ? Center(
-                        child: Text('say something.',
-                            style: GoogleFonts.spaceGrotesk(
-                                color: Colors.white24, fontSize: 14)))
+                        child: Text(
+                          'say something.',
+                          style: GoogleFonts.spaceGrotesk(
+                            color: Colors.white24,
+                            fontSize: 14,
+                          ),
+                        ),
+                      )
                     : ListView.builder(
                         controller: _scrollController,
                         padding: const EdgeInsets.only(top: 8, bottom: 8),
                         itemCount: chatMsgs.length,
                         itemBuilder: (_, i) {
-                          final key =
-                              _chatItemKeys.putIfAbsent(i, () => GlobalKey());
+                          final key = _chatItemKeys.putIfAbsent(
+                            i,
+                            () => GlobalKey(),
+                          );
                           return KeyedSubtree(
                             key: key,
                             child: Column(
@@ -930,8 +1015,9 @@ class _ChatScreenState extends State<ChatScreen>
   }
 
   Widget _buildFilesTab() {
-    final fileMsgs =
-        _messages.where((m) => m.type == MessageType.file).toList();
+    final fileMsgs = _messages
+        .where((m) => m.type == MessageType.file)
+        .toList();
     return Column(
       children: [
         Expanded(
@@ -940,17 +1026,27 @@ class _ChatScreenState extends State<ChatScreen>
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.folder_open_rounded,
-                          color: Colors.white12, size: 48),
+                      const Icon(
+                        Icons.folder_open_rounded,
+                        color: Colors.white12,
+                        size: 48,
+                      ),
                       const SizedBox(height: 12),
-                      Text('no files yet.',
-                          style: GoogleFonts.spaceGrotesk(
-                              color: Colors.white24, fontSize: 14)),
+                      Text(
+                        'no files yet.',
+                        style: GoogleFonts.spaceGrotesk(
+                          color: Colors.white24,
+                          fontSize: 14,
+                        ),
+                      ),
                       const SizedBox(height: 4),
-                      Text('tap send or drag a file.',
-                          style: GoogleFonts.spaceGrotesk(
-                              color: Colors.white.withOpacity(0.08),
-                              fontSize: 12)),
+                      Text(
+                        'tap send or drag a file.',
+                        style: GoogleFonts.spaceGrotesk(
+                          color: Colors.white.withOpacity(0.08),
+                          fontSize: 12,
+                        ),
+                      ),
                     ],
                   ),
                 )
@@ -987,19 +1083,20 @@ class _ChatScreenState extends State<ChatScreen>
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.file_upload_outlined,
-                      size: 16,
-                      color: _dragOver
-                          ? const Color(0xFFB8FF57)
-                          : Colors.white24),
+                  Icon(
+                    Icons.file_upload_outlined,
+                    size: 16,
+                    color: _dragOver ? const Color(0xFFB8FF57) : Colors.white24,
+                  ),
                   const SizedBox(width: 8),
                   Text(
                     _dragOver ? 'drop to send' : 'drag file here',
                     style: GoogleFonts.spaceGrotesk(
-                        fontSize: 12,
-                        color: _dragOver
-                            ? const Color(0xFFB8FF57)
-                            : Colors.white24),
+                      fontSize: 12,
+                      color: _dragOver
+                          ? const Color(0xFFB8FF57)
+                          : Colors.white24,
+                    ),
                   ),
                 ],
               ),
@@ -1020,14 +1117,16 @@ class _ChatScreenState extends State<ChatScreen>
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(Icons.add_rounded,
-                      color: Colors.black, size: 20),
+                  const Icon(Icons.add_rounded, color: Colors.black, size: 20),
                   const SizedBox(width: 8),
-                  Text('send a file',
-                      style: GoogleFonts.spaceGrotesk(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.black)),
+                  Text(
+                    'send a file',
+                    style: GoogleFonts.spaceGrotesk(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.black,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -1072,7 +1171,9 @@ class _ChatScreenState extends State<ChatScreen>
             child: TextField(
               controller: _textController,
               style: GoogleFonts.spaceGrotesk(
-                  fontSize: 15, color: Colors.white),
+                fontSize: 15,
+                color: Colors.white,
+              ),
               cursorColor: const Color(0xFFB8FF57),
               onSubmitted: (_) => _send(),
               decoration: InputDecoration(
@@ -1080,7 +1181,9 @@ class _ChatScreenState extends State<ChatScreen>
                     ? 'paste code...'
                     : 'say something...',
                 hintStyle: GoogleFonts.spaceGrotesk(
-                    color: Colors.white24, fontSize: 14),
+                  color: Colors.white24,
+                  fontSize: 14,
+                ),
                 filled: true,
                 fillColor: const Color(0xFF1A1A1A),
                 border: OutlineInputBorder(
@@ -1088,7 +1191,9 @@ class _ChatScreenState extends State<ChatScreen>
                   borderSide: BorderSide.none,
                 ),
                 contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16, vertical: 12),
+                  horizontal: 16,
+                  vertical: 12,
+                ),
               ),
             ),
           ),
@@ -1102,8 +1207,11 @@ class _ChatScreenState extends State<ChatScreen>
                 color: Color(0xFFB8FF57),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(Icons.arrow_forward_rounded,
-                  color: Colors.black, size: 20),
+              child: const Icon(
+                Icons.arrow_forward_rounded,
+                color: Colors.black,
+                size: 20,
+              ),
             ),
           ),
         ],
@@ -1126,44 +1234,64 @@ class _ChatScreenState extends State<ChatScreen>
         title: Row(
           children: [
             Container(
-              width: 36, height: 36,
+              width: 36,
+              height: 36,
               decoration: BoxDecoration(
                 color: const Color(0xFFB8FF57).withOpacity(0.15),
                 shape: BoxShape.circle,
               ),
               child: Center(
                 child: widget.device.avatar.isNotEmpty
-                    ? Text(widget.device.avatar, style: const TextStyle(fontSize: 16))
+                    ? Text(
+                        widget.device.avatar,
+                        style: const TextStyle(fontSize: 16),
+                      )
                     : Text(
                         widget.device.name[0].toUpperCase(),
                         style: GoogleFonts.spaceGrotesk(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
-                            color: const Color(0xFFB8FF57)),
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: const Color(0xFFB8FF57),
+                        ),
                       ),
               ),
             ),
             const SizedBox(width: 10),
-            Text(widget.device.name,
-                style: GoogleFonts.spaceGrotesk(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white)),
+            Text(
+              widget.device.name,
+              style: GoogleFonts.spaceGrotesk(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: Colors.white,
+              ),
+            ),
           ],
         ),
         actions: [
           PopupMenuButton(
             icon: const Icon(Icons.more_vert_rounded, color: Colors.white54),
             color: const Color(0xFF1A1A1A),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
             itemBuilder: (_) => [
               PopupMenuItem(
                 onTap: _clearChat,
                 child: Row(
                   children: [
-                    const Icon(Icons.delete_sweep_rounded, color: Color(0xFFFF6B6B), size: 18),
+                    const Icon(
+                      Icons.delete_sweep_rounded,
+                      color: Color(0xFFFF6B6B),
+                      size: 18,
+                    ),
                     const SizedBox(width: 10),
-                    Text('clear chat', style: GoogleFonts.spaceGrotesk(color: const Color(0xFFFF6B6B), fontSize: 14)),
+                    Text(
+                      'clear chat',
+                      style: GoogleFonts.spaceGrotesk(
+                        color: const Color(0xFFFF6B6B),
+                        fontSize: 14,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -1177,8 +1305,13 @@ class _ChatScreenState extends State<ChatScreen>
           labelColor: const Color(0xFFB8FF57),
           unselectedLabelColor: Colors.white38,
           labelStyle: GoogleFonts.spaceGrotesk(
-              fontSize: 13, fontWeight: FontWeight.w600),
-          tabs: const [Tab(text: 'chat'), Tab(text: 'files')],
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+          ),
+          tabs: const [
+            Tab(text: 'chat'),
+            Tab(text: 'files'),
+          ],
         ),
       ),
       body: SafeArea(
@@ -1205,9 +1338,7 @@ class _PdfPreviewState extends State<_PdfPreview> {
   @override
   void initState() {
     super.initState();
-    _controller = PdfController(
-      document: PdfDocument.openData(widget.bytes),
-    );
+    _controller = PdfController(document: PdfDocument.openData(widget.bytes));
   }
 
   @override

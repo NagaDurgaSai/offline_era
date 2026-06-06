@@ -29,10 +29,8 @@ class ChatService {
   String? activeChatIp;
 
   final Map<String, List<ChatMessage>> _cache = {};
-  // notification grouping: track unread count per peer
   final Map<String, int> _pendingNotifications = {};
 
-  // Returns cached messages synchronously — empty list if not yet loaded
   List<ChatMessage> getCachedMessages(String peerIp) {
     return _cache[peerIp] ?? [];
   }
@@ -40,21 +38,27 @@ class ChatService {
   Future<List<ChatMessage>> historyFor(String peerIp) async {
     if (_cache.containsKey(peerIp)) return _cache[peerIp]!;
     final rows = await db.messagesForPeer(peerIp);
-    final msgs = rows.map((r) => ChatMessage(
-      id: r.id,
-      senderName: r.senderName,
-      senderIp: r.senderIp,
-      content: r.content,
-      type: MessageType.values.firstWhere((e) => e.name == r.type,
-          orElse: () => MessageType.text),
-      timestamp: DateTime.parse(r.timestamp),
-      isMe: r.isMe,
-      fileName: r.fileName,
-      savedPath: r.savedPath,
-      fileBytes: r.savedPath != null && File(r.savedPath!).existsSync()
-          ? File(r.savedPath!).readAsBytesSync()
-          : null,
-    )).toList();
+    final msgs = rows
+        .map(
+          (r) => ChatMessage(
+            id: r.id,
+            senderName: r.senderName,
+            senderIp: r.senderIp,
+            content: r.content,
+            type: MessageType.values.firstWhere(
+              (e) => e.name == r.type,
+              orElse: () => MessageType.text,
+            ),
+            timestamp: DateTime.parse(r.timestamp),
+            isMe: r.isMe,
+            fileName: r.fileName,
+            savedPath: r.savedPath,
+            fileBytes: r.savedPath != null && File(r.savedPath!).existsSync()
+                ? File(r.savedPath!).readAsBytesSync()
+                : null,
+          ),
+        )
+        .toList();
     _cache[peerIp] = msgs;
     return msgs;
   }
@@ -64,18 +68,20 @@ class ChatService {
     if (!_cache[peerIp]!.any((m) => m.id == msg.id)) {
       _cache[peerIp]!.add(msg);
     }
-    await db.insertMessage(MessagesCompanion(
-      id: Value(msg.id),
-      peerIp: Value(peerIp),
-      senderName: Value(msg.senderName),
-      senderIp: Value(msg.senderIp),
-      content: Value(msg.content),
-      type: Value(msg.type.name),
-      timestamp: Value(msg.timestamp.toIso8601String()),
-      isMe: Value(msg.isMe),
-      fileName: Value(msg.fileName),
-      savedPath: Value(msg.savedPath),
-    ));
+    await db.insertMessage(
+      MessagesCompanion(
+        id: Value(msg.id),
+        peerIp: Value(peerIp),
+        senderName: Value(msg.senderName),
+        senderIp: Value(msg.senderIp),
+        content: Value(msg.content),
+        type: Value(msg.type.name),
+        timestamp: Value(msg.timestamp.toIso8601String()),
+        isMe: Value(msg.isMe),
+        fileName: Value(msg.fileName),
+        savedPath: Value(msg.savedPath),
+      ),
+    );
   }
 
   Future<void> startServer(String name, String myIp) async {
@@ -96,7 +102,9 @@ class ChatService {
   void _handleIncoming(Socket socket) {
     final remoteIp = socket.remoteAddress.address;
     if (_connections.containsKey(remoteIp)) {
-      try { _connections[remoteIp]?.destroy(); } catch (_) {}
+      try {
+        _connections[remoteIp]?.destroy();
+      } catch (_) {}
     }
     _connections[remoteIp] = socket;
     _listenOnSocket(socket, remoteIp);
@@ -153,10 +161,10 @@ class ChatService {
       if (msgType == 'file_end') {
         final buf = _fileBuffers.remove(remoteIp);
         if (buf == null) return;
-        final allBytes =
-            Uint8List.fromList(buf.bytes.expand((e) => e).toList());
-        final savedPath =
-            await StorageService.saveFile(buf.fileName, allBytes);
+        final allBytes = Uint8List.fromList(
+          buf.bytes.expand((e) => e).toList(),
+        );
+        final savedPath = await StorageService.saveFile(buf.fileName, allBytes);
         final msg = ChatMessage(
           id: buf.id,
           senderName: buf.senderName,
@@ -175,7 +183,11 @@ class ChatService {
           await _sendSeenToIp(remoteIp);
         }
         if (!isInChat) {
-          _showGroupedNotification(buf.senderName, '📁 ${buf.fileName}', remoteIp);
+          _showGroupedNotification(
+            buf.senderName,
+            '📁 ${buf.fileName}',
+            remoteIp,
+          );
         }
         return;
       }
@@ -201,7 +213,11 @@ class ChatService {
     } catch (_) {}
   }
 
-  void _showGroupedNotification(String senderName, String preview, String peerIp) {
+  void _showGroupedNotification(
+    String senderName,
+    String preview,
+    String peerIp,
+  ) {
     _pendingNotifications[peerIp] = (_pendingNotifications[peerIp] ?? 0) + 1;
     final count = _pendingNotifications[peerIp]!;
     if (count == 1) {
@@ -239,20 +255,11 @@ class ChatService {
 
   final Map<String, _FileBuffer> _fileBuffers = {};
 
-  void _sendPacket(Socket socket, Map<String, dynamic> json) {
-    final payload = utf8.encode(jsonEncode(json));
-    final len = payload.length;
-    final header = Uint8List(4);
-    header[0] = (len >> 24) & 0xFF;
-    header[1] = (len >> 16) & 0xFF;
-    header[2] = (len >> 8) & 0xFF;
-    header[3] = len & 0xFF;
-    socket.add(header);
-    socket.add(payload);
-  }
-
   Future<void> sendTo(
-      DiscoveredDevice device, String content, MessageType type) async {
+    DiscoveredDevice device,
+    String content,
+    MessageType type,
+  ) async {
     final socket = await _getOrConnect(device);
     if (socket == null) return;
     final msg = ChatMessage(
@@ -278,7 +285,10 @@ class ChatService {
   }
 
   Future<void> sendFile(
-      DiscoveredDevice device, String fileName, Uint8List bytes) async {
+    DiscoveredDevice device,
+    String fileName,
+    Uint8List bytes,
+  ) async {
     final socket = await _getOrConnect(device);
     if (socket == null) return;
     final id = DateTime.now().millisecondsSinceEpoch.toString();
@@ -300,27 +310,20 @@ class ChatService {
     await _persist(device.ip, msg);
     _fileController.add(msg);
     try {
-      _sendPacket(socket, {
-        'type': 'file_start',
-        'id': id,
-        'senderName': _myName,
-        'senderIp': _myIp,
-        'fileName': fileName,
-        'totalSize': bytes.length,
-        'timestamp': timestamp,
-      });
+      socket.write(
+        '${jsonEncode({'type': 'file_start', 'id': id, 'senderName': _myName, 'senderIp': _myIp, 'fileName': fileName, 'totalSize': bytes.length, 'timestamp': timestamp})}\n',
+      );
       int offset = 0;
       while (offset < bytes.length) {
         final end = (offset + chunkSize).clamp(0, bytes.length);
         final chunk = bytes.sublist(offset, end);
-        _sendPacket(socket, {
-          'type': 'file_chunk',
-          'data': base64Encode(chunk),
-        });
+        socket.write(
+          '${jsonEncode({'type': 'file_chunk', 'data': base64Encode(chunk)})}\n',
+        );
         offset = end;
         await Future.delayed(Duration.zero);
       }
-      _sendPacket(socket, {'type': 'file_end'});
+      socket.write('${jsonEncode({'type': 'file_end'})}\n');
     } catch (_) {
       _connections.remove(device.ip);
     }
@@ -330,8 +333,11 @@ class ChatService {
     Socket? socket = _connections[device.ip];
     if (socket != null) return socket;
     try {
-      socket = await Socket.connect(device.ip, device.port,
-          timeout: const Duration(seconds: 3));
+      socket = await Socket.connect(
+        device.ip,
+        device.port,
+        timeout: const Duration(seconds: 3),
+      );
       _connections[device.ip] = socket;
       _listenOnSocket(socket, device.ip);
       return socket;
@@ -341,7 +347,9 @@ class ChatService {
   }
 
   void stop() {
-    for (final s in _connections.values) s.destroy();
+    for (final s in _connections.values) {
+      s.destroy();
+    }
     _connections.clear();
     _server?.close();
     _server = null;

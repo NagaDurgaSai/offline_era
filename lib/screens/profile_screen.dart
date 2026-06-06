@@ -295,7 +295,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             style: GoogleFonts.spaceGrotesk(
                 fontSize: 18, fontWeight: FontWeight.w700, color: Colors.white)),
       ),
-      body: Padding(
+      body: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -432,7 +432,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ],
               ),
             ),
-            const SizedBox(height: 32),
+            const SizedBox(height: 24),
 
             // IP tile
             if (ip.isNotEmpty)
@@ -445,7 +445,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
 
 
-            const Spacer(),
+            const SizedBox(height: 32),
             _infoTile('storage used', _storageUsed, icon: Icons.folder_outlined),
             const SizedBox(height: 8),
             Center(

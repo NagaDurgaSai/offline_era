@@ -46,7 +46,13 @@ class _HomeScreenState extends State<HomeScreen> {
     final user = context.read<UserProvider>();
     _chat = ChatService();
     await _chat.startServer(user.name, user.localIp);
-    await _discovery.start(user.name, user.avatar, user.localIp, _chat.db, user.deviceId);
+    await _discovery.start(
+      user.name,
+      user.avatar,
+      user.localIp,
+      _chat.db,
+      user.deviceId,
+    );
 
     _discovery.devicesStream.listen((devices) {
       if (!mounted) return;
@@ -77,9 +83,11 @@ class _HomeScreenState extends State<HomeScreen> {
           _updateLastMessage(msg.senderIp, msg);
         });
         if (!isActiveChat) {
-          _showBanner(msg.senderName,
-              msg.type == MessageType.code ? '📎 code snippet' : msg.content,
-              msg.senderIp);
+          _showBanner(
+            msg.senderName,
+            msg.type == MessageType.code ? '📎 code snippet' : msg.content,
+            msg.senderIp,
+          );
         }
       } else {
         setState(() => _updateLastMessage(msg.senderIp, msg));
@@ -99,7 +107,9 @@ class _HomeScreenState extends State<HomeScreen> {
           _showBanner(msg.senderName, '📁 ${msg.content}', msg.senderIp);
         }
       } else {
-        setState(() => _updateLastMessage(msg.isMe ? msg.senderIp : msg.senderIp, msg));
+        setState(
+          () => _updateLastMessage(msg.isMe ? msg.senderIp : msg.senderIp, msg),
+        );
       }
     });
 
@@ -109,8 +119,6 @@ class _HomeScreenState extends State<HomeScreen> {
     });
 
     if (mounted) setState(() => _started = true);
-
-
   }
 
   Future<void> _loadLastMessage(String peerIp) async {
@@ -229,115 +237,52 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _showManualConnectDialog() async {
-    final ipController = TextEditingController();
-    String? errorMsg;
-
-    await showDialog(
+    final ip = await showDialog<String>(
       context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialogState) => AlertDialog(
-          backgroundColor: const Color(0xFF1A1A1A),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: Text('connect by IP',
-              style: GoogleFonts.spaceGrotesk(
-                  color: Colors.white, fontWeight: FontWeight.w700)),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                "enter the device's local IP address",
-                style: GoogleFonts.spaceGrotesk(fontSize: 13, color: Colors.white54),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: ipController,
-                autofocus: true,
-                keyboardType: TextInputType.number,
-                style: GoogleFonts.spaceGrotesk(color: Colors.white),
-                cursorColor: const Color(0xFFB8FF57),
-                decoration: InputDecoration(
-                  hintText: '192.168.x.x',
-                  hintStyle: GoogleFonts.spaceGrotesk(color: Colors.white24),
-                  filled: true,
-                  fillColor: Colors.white.withOpacity(0.06),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: BorderSide.none,
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: const BorderSide(color: Color(0xFFB8FF57), width: 1),
-                  ),
-                  errorText: errorMsg,
-                  errorStyle: GoogleFonts.spaceGrotesk(color: Colors.redAccent),
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: Text('cancel',
-                  style: GoogleFonts.spaceGrotesk(color: Colors.white38)),
-            ),
-            TextButton(
-              onPressed: () async {
-                final ip = ipController.text.trim();
-                if (ip.isEmpty) {
-                  setDialogState(() => errorMsg = 'enter an IP');
-                  return;
-                }
-                final parts = ip.split('.');
-                if (parts.length != 4 ||
-                    parts.any((p) => int.tryParse(p) == null)) {
-                  setDialogState(() => errorMsg = 'invalid IP format');
-                  return;
-                }
-                Navigator.pop(ctx);
-                if (!mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('connecting to \$ip...',
-                        style: GoogleFonts.spaceGrotesk()),
-                    backgroundColor: const Color(0xFF1A1A1A),
-                    behavior: SnackBarBehavior.floating,
-                    duration: const Duration(seconds: 4),
-                  ),
-                );
-                final result = await _discovery.manualConnect(ip);
-                if (!mounted) return;
-                ScaffoldMessenger.of(context).hideCurrentSnackBar();
-                if (result != null) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('connected to \$result',
-                          style: GoogleFonts.spaceGrotesk()),
-                      backgroundColor: const Color(0xFF1A1A1A),
-                      behavior: SnackBarBehavior.floating,
-                    ),
-                  );
-                } else {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('could not reach \$ip — is the app open there?',
-                          style: GoogleFonts.spaceGrotesk()),
-                      backgroundColor: Colors.red.shade900,
-                      behavior: SnackBarBehavior.floating,
-                    ),
-                  );
-                }
-              },
-              child: Text('connect',
-                  style: GoogleFonts.spaceGrotesk(
-                      color: const Color(0xFFB8FF57),
-                      fontWeight: FontWeight.w700)),
-            ),
-          ],
+      builder: (_) => const _ManualConnectDialog(),
+    );
+
+    if (!mounted || ip == null) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'connecting to $ip...',
+          style: GoogleFonts.spaceGrotesk(),
         ),
+        backgroundColor: const Color(0xFF1A1A1A),
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 4),
       ),
     );
-    ipController.dispose();
+
+    final result = await _discovery.manualConnect(ip);
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    if (result != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'connected to $result',
+            style: GoogleFonts.spaceGrotesk(),
+          ),
+          backgroundColor: const Color(0xFF1A1A1A),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'could not reach $ip — is the app open there?',
+            style: GoogleFonts.spaceGrotesk(),
+          ),
+          backgroundColor: Colors.red.shade900,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
   }
 
   void _openProfile() {
@@ -366,11 +311,14 @@ class _HomeScreenState extends State<HomeScreen> {
         backgroundColor: const Color(0xFF0F0F0F),
         elevation: 0,
         titleSpacing: 24,
-        title: Text('offline era.',
-            style: GoogleFonts.spaceGrotesk(
-                fontSize: 20,
-                fontWeight: FontWeight.w800,
-                color: const Color(0xFFB8FF57))),
+        title: Text(
+          'offline era.',
+          style: GoogleFonts.spaceGrotesk(
+            fontSize: 20,
+            fontWeight: FontWeight.w800,
+            color: const Color(0xFFB8FF57),
+          ),
+        ),
         actions: [
           GestureDetector(
             onTap: _openProfile,
@@ -385,13 +333,20 @@ class _HomeScreenState extends State<HomeScreen> {
                 children: [
                   user.avatar.isNotEmpty
                       ? Text(user.avatar, style: const TextStyle(fontSize: 14))
-                      : const Icon(Icons.person_rounded, size: 14, color: Colors.white54),
-                  const SizedBox(width: 6),
-                  Text(user.name,
-                      style: GoogleFonts.spaceGrotesk(
-                          fontSize: 13,
+                      : const Icon(
+                          Icons.person_rounded,
+                          size: 14,
                           color: Colors.white54,
-                          fontWeight: FontWeight.w600)),
+                        ),
+                  const SizedBox(width: 6),
+                  Text(
+                    user.name,
+                    style: GoogleFonts.spaceGrotesk(
+                      fontSize: 13,
+                      color: Colors.white54,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -428,19 +383,24 @@ class _HomeScreenState extends State<HomeScreen> {
                 color: const Color(0xFFB8FF57).withOpacity(0.1),
                 borderRadius: BorderRadius.circular(10),
                 border: Border.all(
-                    color: const Color(0xFFB8FF57).withOpacity(0.3)),
+                  color: const Color(0xFFB8FF57).withOpacity(0.3),
+                ),
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.mark_chat_unread_rounded,
-                      color: Color(0xFFB8FF57), size: 16),
+                  const Icon(
+                    Icons.mark_chat_unread_rounded,
+                    color: Color(0xFFB8FF57),
+                    size: 16,
+                  ),
                   const SizedBox(width: 8),
                   Text(
                     '$totalUnread new ${totalUnread == 1 ? 'message' : 'messages'}',
                     style: GoogleFonts.spaceGrotesk(
-                        fontSize: 13,
-                        color: const Color(0xFFB8FF57),
-                        fontWeight: FontWeight.w600),
+                      fontSize: 13,
+                      color: const Color(0xFFB8FF57),
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ],
               ),
@@ -449,18 +409,23 @@ class _HomeScreenState extends State<HomeScreen> {
             padding: const EdgeInsets.fromLTRB(24, 16, 24, 8),
             child: Row(
               children: [
-                Text("who's around",
-                    style: GoogleFonts.spaceGrotesk(
-                        fontSize: 13,
-                        color: Colors.white38,
-                        letterSpacing: 0.5)),
+                Text(
+                  "who's around",
+                  style: GoogleFonts.spaceGrotesk(
+                    fontSize: 13,
+                    color: Colors.white38,
+                    letterSpacing: 0.5,
+                  ),
+                ),
                 const SizedBox(width: 8),
                 if (_started)
                   Container(
                     width: 6,
                     height: 6,
                     decoration: const BoxDecoration(
-                        color: Color(0xFFB8FF57), shape: BoxShape.circle),
+                      color: Color(0xFFB8FF57),
+                      shape: BoxShape.circle,
+                    ),
                   ),
               ],
             ),
@@ -475,113 +440,149 @@ class _HomeScreenState extends State<HomeScreen> {
                           width: 24,
                           height: 24,
                           child: CircularProgressIndicator(
-                              strokeWidth: 2, color: Color(0xFFB8FF57)),
+                            strokeWidth: 2,
+                            color: Color(0xFFB8FF57),
+                          ),
                         ),
                         const SizedBox(height: 12),
-                        Text('scanning network...',
-                            style: GoogleFonts.spaceGrotesk(
-                                color: Colors.white24, fontSize: 13)),
+                        Text(
+                          'scanning network...',
+                          style: GoogleFonts.spaceGrotesk(
+                            color: Colors.white24,
+                            fontSize: 13,
+                          ),
+                        ),
                       ],
                     ),
                   )
                 : _devices.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text('( ´_ゝ`)',
-                                style: GoogleFonts.spaceGrotesk(
-                                    fontSize: 32, color: Colors.white24)),
-                            const SizedBox(height: 12),
-                            Text('no one else is here yet.',
-                                style: GoogleFonts.spaceGrotesk(
-                                    color: Colors.white24, fontSize: 14)),
-                            const SizedBox(height: 4),
-                            Text('open the app on another device.',
-                                style: GoogleFonts.spaceGrotesk(
-                                    color: Colors.white.withOpacity(0.08),
-                                    fontSize: 12)),
-                          ],
+                ? Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          '( ´_ゝ`)',
+                          style: GoogleFonts.spaceGrotesk(
+                            fontSize: 32,
+                            color: Colors.white24,
+                          ),
                         ),
-                      )
-                    : ListView.builder(
-                        padding: const EdgeInsets.only(top: 8),
-                        itemCount: _devices.length,
-                        itemBuilder: (_, i) {
-                          final device = _devices[i];
-                          return Dismissible(
-                            key: Key(device.ip),
-                            direction: DismissDirection.endToStart,
-                            background: Container(
-                              margin: const EdgeInsets.symmetric(
-                                  horizontal: 16, vertical: 6),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFFF6B6B).withOpacity(0.15),
-                                borderRadius: BorderRadius.circular(14),
-                              ),
-                              alignment: Alignment.centerRight,
-                              padding: const EdgeInsets.only(right: 20),
-                              child: const Icon(Icons.delete_sweep_rounded,
-                                  color: Color(0xFFFF6B6B), size: 22),
-                            ),
-                            confirmDismiss: (_) async {
-                              return await showDialog<bool>(
+                        const SizedBox(height: 12),
+                        Text(
+                          'no one else is here yet.',
+                          style: GoogleFonts.spaceGrotesk(
+                            color: Colors.white24,
+                            fontSize: 14,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'open the app on another device.',
+                          style: GoogleFonts.spaceGrotesk(
+                            color: Colors.white.withOpacity(0.08),
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                : ListView.builder(
+                    padding: const EdgeInsets.only(top: 8),
+                    itemCount: _devices.length,
+                    itemBuilder: (_, i) {
+                      final device = _devices[i];
+                      return Dismissible(
+                        key: Key(device.ip),
+                        direction: DismissDirection.endToStart,
+                        background: Container(
+                          margin: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFF6B6B).withOpacity(0.15),
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          alignment: Alignment.centerRight,
+                          padding: const EdgeInsets.only(right: 20),
+                          child: const Icon(
+                            Icons.delete_sweep_rounded,
+                            color: Color(0xFFFF6B6B),
+                            size: 22,
+                          ),
+                        ),
+                        confirmDismiss: (_) async {
+                          return await showDialog<bool>(
                                 context: context,
-                                builder: (_) => AlertDialog(
+                                builder: (dialogContext) => AlertDialog(
                                   backgroundColor: const Color(0xFF1A1A1A),
                                   shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(14)),
-                                  title: Text('remove ${device.name}?',
-                                      style: GoogleFonts.spaceGrotesk(
-                                          color: Colors.white,
-                                          fontWeight: FontWeight.w700)),
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
+                                  title: Text(
+                                    'remove ${device.name}?',
+                                    style: GoogleFonts.spaceGrotesk(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
                                   content: Text(
-                                      'removes chat history and device from list.',
-                                      style: GoogleFonts.spaceGrotesk(
-                                          color: Colors.white54, fontSize: 13)),
+                                    'removes chat history and device from list.',
+                                    style: GoogleFonts.spaceGrotesk(
+                                      color: Colors.white54,
+                                      fontSize: 13,
+                                    ),
+                                  ),
                                   actions: [
                                     TextButton(
                                       onPressed: () =>
-                                          Navigator.pop(context, false),
-                                      child: Text('cancel',
-                                          style: GoogleFonts.spaceGrotesk(
-                                              color: Colors.white38)),
+                                          Navigator.pop(dialogContext, false),
+                                      child: Text(
+                                        'cancel',
+                                        style: GoogleFonts.spaceGrotesk(
+                                          color: Colors.white38,
+                                        ),
+                                      ),
                                     ),
                                     TextButton(
                                       onPressed: () =>
-                                          Navigator.pop(context, true),
-                                      child: Text('remove',
-                                          style: GoogleFonts.spaceGrotesk(
-                                              color: const Color(0xFFFF6B6B),
-                                              fontWeight: FontWeight.w700)),
+                                          Navigator.pop(dialogContext, true),
+                                      child: Text(
+                                        'remove',
+                                        style: GoogleFonts.spaceGrotesk(
+                                          color: const Color(0xFFFF6B6B),
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
                                     ),
                                   ],
                                 ),
-                              ) ?? false;
-                            },
-                            onDismissed: (_) async {
-                              await _chat.db.deleteMessagesForPeer(device.ip);
-                              await _chat.db.deleteKnownDevice(device.ip);
-                              _chat.clearCache(device.ip);
-                              _discovery.removeDevice(device.ip);
-                              setState(() {
-                                _devices.removeWhere((d) => d.ip == device.ip);
-                                _unread.remove(device.ip);
-                                _lastMessage.remove(device.ip);
-                                _lastMessageTime.remove(device.ip);
-                              });
-                            },
-                            child: DeviceTile(
-                              device: device,
-                              unreadCount: _unread[device.ip] ?? 0,
-                              isOnline: _onlineIps.contains(device.ip),
-                              lastMessage: _lastMessage[device.ip],
-                              lastMessageTime: _lastMessageTime[device.ip],
-                              onTap: () => _openChat(device),
-                            ),
-                          );
+                              ) ??
+                              false;
                         },
-                      ),
+                        onDismissed: (_) async {
+                          await _chat.db.deleteMessagesForPeer(device.ip);
+                          await _chat.db.deleteKnownDevice(device.ip);
+                          _chat.clearCache(device.ip);
+                          _discovery.removeDevice(device.ip);
+                          setState(() {
+                            _devices.removeWhere((d) => d.ip == device.ip);
+                            _unread.remove(device.ip);
+                            _lastMessage.remove(device.ip);
+                            _lastMessageTime.remove(device.ip);
+                          });
+                        },
+                        child: DeviceTile(
+                          device: device,
+                          unreadCount: _unread[device.ip] ?? 0,
+                          isOnline: _onlineIps.contains(device.ip),
+                          lastMessage: _lastMessage[device.ip],
+                          lastMessageTime: _lastMessageTime[device.ip],
+                          onTap: () => _openChat(device),
+                        ),
+                      );
+                    },
+                  ),
           ),
           Padding(
             padding: const EdgeInsets.all(16),
@@ -602,13 +603,134 @@ class _HomeScreenState extends State<HomeScreen> {
                       ? 'broadcasting on ${user.localIp}'
                       : 'connecting...',
                   style: GoogleFonts.spaceGrotesk(
-                      fontSize: 11, color: Colors.white24),
+                    fontSize: 11,
+                    color: Colors.white24,
+                  ),
                 ),
               ],
             ),
           ),
         ],
       ),
+    );
+  }
+}
+
+class _ManualConnectDialog extends StatefulWidget {
+  const _ManualConnectDialog();
+
+  @override
+  State<_ManualConnectDialog> createState() => _ManualConnectDialogState();
+}
+
+class _ManualConnectDialogState extends State<_ManualConnectDialog> {
+  final _ipController = TextEditingController();
+  String? _errorMsg;
+
+  @override
+  void dispose() {
+    _ipController.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final ip = _ipController.text.trim();
+    if (ip.isEmpty) {
+      setState(() => _errorMsg = 'enter an IP');
+      return;
+    }
+
+    final parts = ip.split('.');
+    final isValidIp =
+        parts.length == 4 &&
+        parts.every((part) {
+          final octet = int.tryParse(part);
+          return octet != null && octet >= 0 && octet <= 255;
+        });
+
+    if (!isValidIp) {
+      setState(() => _errorMsg = 'invalid IP format');
+      return;
+    }
+
+    Navigator.pop(context, ip);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+      backgroundColor: const Color(0xFF1A1A1A),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      title: Text(
+        'connect by IP',
+        style: GoogleFonts.spaceGrotesk(
+          color: Colors.white,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              "enter the device's local IP address",
+              style: GoogleFonts.spaceGrotesk(
+                fontSize: 13,
+                color: Colors.white54,
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _ipController,
+              autofocus: true,
+              keyboardType: TextInputType.text,
+              style: GoogleFonts.spaceGrotesk(color: Colors.white),
+              cursorColor: const Color(0xFFB8FF57),
+              decoration: InputDecoration(
+                hintText: '192.168.x.x',
+                hintStyle: GoogleFonts.spaceGrotesk(color: Colors.white24),
+                filled: true,
+                fillColor: Colors.white.withValues(alpha: 0.06),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: BorderSide.none,
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: const BorderSide(
+                    color: Color(0xFFB8FF57),
+                    width: 1,
+                  ),
+                ),
+                errorText: _errorMsg,
+                errorStyle: GoogleFonts.spaceGrotesk(color: Colors.redAccent),
+              ),
+              onSubmitted: (_) => _submit(),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text(
+            'cancel',
+            style: GoogleFonts.spaceGrotesk(color: Colors.white38),
+          ),
+        ),
+        TextButton(
+          onPressed: _submit,
+          child: Text(
+            'connect',
+            style: GoogleFonts.spaceGrotesk(
+              color: const Color(0xFFB8FF57),
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -639,7 +761,9 @@ class _NotificationBannerState extends State<_NotificationBanner>
   void initState() {
     super.initState();
     _anim = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 300));
+      vsync: this,
+      duration: const Duration(milliseconds: 300),
+    );
     _slide = Tween<Offset>(
       begin: const Offset(0, -1),
       end: Offset.zero,
@@ -667,7 +791,8 @@ class _NotificationBannerState extends State<_NotificationBanner>
               color: const Color(0xFF1E1E1E),
               borderRadius: BorderRadius.circular(14),
               border: Border.all(
-                  color: const Color(0xFFB8FF57).withOpacity(0.3)),
+                color: const Color(0xFFB8FF57).withOpacity(0.3),
+              ),
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withOpacity(0.4),
@@ -689,9 +814,10 @@ class _NotificationBannerState extends State<_NotificationBanner>
                     child: Text(
                       widget.sender[0].toUpperCase(),
                       style: GoogleFonts.spaceGrotesk(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                          color: const Color(0xFFB8FF57)),
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: const Color(0xFFB8FF57),
+                      ),
                     ),
                   ),
                 ),
@@ -700,23 +826,33 @@ class _NotificationBannerState extends State<_NotificationBanner>
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(widget.sender,
-                          style: GoogleFonts.spaceGrotesk(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700,
-                              color: Colors.white)),
-                      Text(widget.preview,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: GoogleFonts.spaceGrotesk(
-                              fontSize: 12, color: Colors.white54)),
+                      Text(
+                        widget.sender,
+                        style: GoogleFonts.spaceGrotesk(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                        ),
+                      ),
+                      Text(
+                        widget.preview,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.spaceGrotesk(
+                          fontSize: 12,
+                          color: Colors.white54,
+                        ),
+                      ),
                     ],
                   ),
                 ),
                 GestureDetector(
                   onTap: widget.onDismiss,
-                  child: const Icon(Icons.close_rounded,
-                      color: Colors.white24, size: 18),
+                  child: const Icon(
+                    Icons.close_rounded,
+                    color: Colors.white24,
+                    size: 18,
+                  ),
                 ),
               ],
             ),
