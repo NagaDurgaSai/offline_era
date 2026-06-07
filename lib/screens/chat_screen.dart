@@ -435,12 +435,23 @@ class _ChatScreenState extends State<ChatScreen>
     }
   }
 
-  Future<void> _shareFile(ChatMessage msg) async {
+  Future<void> _shareFile(ChatMessage msg, {BuildContext? buttonContext}) async {
     if (msg.savedPath == null) return;
     if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
       await OpenFilex.open(msg.savedPath!);
     } else {
-      await Share.shareXFiles([XFile(msg.savedPath!)]);
+      Rect? shareRect;
+      if (buttonContext != null) {
+        final box = buttonContext.findRenderObject() as RenderBox?;
+        if (box != null && box.hasSize) {
+          final offset = box.localToGlobal(Offset.zero);
+          shareRect = offset & box.size;
+        }
+      }
+      await Share.shareXFiles(
+        [XFile(msg.savedPath!)],
+        sharePositionOrigin: shareRect ?? Rect.fromLTWH(0, 0, 100, 100),
+      );
     }
   }
 
@@ -646,7 +657,10 @@ class _ChatScreenState extends State<ChatScreen>
                     Container(width: 1, height: 30, color: Colors.white10),
                     Expanded(
                       child: GestureDetector(
-                        onTap: () => _shareFile(msg),
+                        onTap: () {
+                          final ctx = context;
+                          _shareFile(msg, buttonContext: ctx);
+                        },
                         child: Container(
                           padding: const EdgeInsets.symmetric(vertical: 8),
                           child: Center(
@@ -1041,7 +1055,7 @@ class _ChatScreenState extends State<ChatScreen>
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'tap send or drag a file.',
+                        (Platform.isMacOS || Platform.isWindows) ? 'tap send or drag a file.' : 'tap send to share a file.',
                         style: GoogleFonts.spaceGrotesk(
                           color: Colors.white.withOpacity(0.08),
                           fontSize: 12,
@@ -1056,53 +1070,59 @@ class _ChatScreenState extends State<ChatScreen>
                   itemBuilder: (_, i) => _buildMessage(fileMsgs[i]),
                 ),
         ),
-        DropTarget(
-          onDragDone: (details) async {
-            for (final file in details.files) {
-              await _sendFileFromPath(file.path);
-            }
-            setState(() => _dragOver = false);
-          },
-          onDragEntered: (_) => setState(() => _dragOver = true),
-          onDragExited: (_) => setState(() => _dragOver = false),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            margin: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-            height: 112,
-            decoration: BoxDecoration(
-              color: _dragOver
-                  ? const Color(0xFFB8FF57).withOpacity(0.12)
-                  : Colors.white.withOpacity(0.03),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(
-                color: _dragOver ? const Color(0xFFB8FF57) : Colors.white12,
-                width: _dragOver ? 1.5 : 1,
+        if (Platform.isMacOS || Platform.isWindows)
+          DropTarget(
+            onDragDone: (details) async {
+              for (final file in details.files) {
+                try {
+                  final bytes = await file.readAsBytes();
+                  final name = file.path.split(Platform.pathSeparator).last;
+                  if (_seenByPeer) setState(() => _seenByPeer = false);
+                  await widget.chatService.sendFile(widget.device, name, bytes);
+                } catch (_) {}
+              }
+              setState(() => _dragOver = false);
+            },
+            onDragEntered: (_) => setState(() => _dragOver = true),
+            onDragExited: (_) => setState(() => _dragOver = false),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              margin: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+              height: 112,
+              decoration: BoxDecoration(
+                color: _dragOver
+                    ? const Color(0xFFB8FF57).withOpacity(0.12)
+                    : Colors.white.withOpacity(0.03),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: _dragOver ? const Color(0xFFB8FF57) : Colors.white12,
+                  width: _dragOver ? 1.5 : 1,
+                ),
               ),
-            ),
-            child: Center(
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Icons.file_upload_outlined,
-                    size: 16,
-                    color: _dragOver ? const Color(0xFFB8FF57) : Colors.white24,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    _dragOver ? 'drop to send' : 'drag file here',
-                    style: GoogleFonts.spaceGrotesk(
-                      fontSize: 12,
-                      color: _dragOver
-                          ? const Color(0xFFB8FF57)
-                          : Colors.white24,
+              child: Center(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.file_upload_outlined,
+                      size: 16,
+                      color: _dragOver ? const Color(0xFFB8FF57) : Colors.white24,
                     ),
-                  ),
-                ],
+                    const SizedBox(width: 8),
+                    Text(
+                      _dragOver ? 'drop to send' : 'drag file here',
+                      style: GoogleFonts.spaceGrotesk(
+                        fontSize: 12,
+                        color: _dragOver
+                            ? const Color(0xFFB8FF57)
+                            : Colors.white24,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
-        ),
         Container(
           padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
           color: const Color(0xFF0F0F0F),
