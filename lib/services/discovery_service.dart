@@ -140,7 +140,12 @@ class DiscoveryService {
       'deviceId': _myDeviceId,
     });
     final data = utf8.encode(payload);
-    _socket!.send(data, InternetAddress('255.255.255.255'), discoveryPort);
+    // Subnet-directed broadcast works on iOS; 255.255.255.255 doesn't
+    final parts = _myIp.split('.');
+    final broadcastIp = parts.length == 4
+        ? '${parts[0]}.${parts[1]}.${parts[2]}.255'
+        : '255.255.255.255';
+    _socket!.send(data, InternetAddress(broadcastIp), discoveryPort);
   }
 
   void _cleanup() {

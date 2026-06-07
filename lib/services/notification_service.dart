@@ -12,7 +12,7 @@ class NotificationService {
       requestBadgePermission: true,
       requestSoundPermission: true,
     );
-    const settings = InitializationSettings(android: android, macOS: darwin);
+    const settings = InitializationSettings(android: android, iOS: darwin, macOS: darwin);
     await _plugin.initialize(settings);
     final androidPlugin =
         _plugin.resolvePlatformSpecificImplementation<
