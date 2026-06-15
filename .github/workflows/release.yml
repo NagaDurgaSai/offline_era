@@ -68,10 +68,14 @@ jobs:
       - run: flutter pub get
       - run: dart run build_runner build --delete-conflicting-outputs
       - run: flutter config --enable-windows-desktop
-      - name: Set MSVC coroutine compat flag
-        run: echo "CL=/D_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS" >> $env:GITHUB_ENV
+      - name: Set MSVC and CMake compat flags
+        run: |
+          echo "CL=/D_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS" >> $env:GITHUB_ENV
+          echo "CMAKE_POLICY_VERSION_MINIMUM=3.5" >> $env:GITHUB_ENV
         shell: pwsh
       - run: flutter build windows --release
+        env:
+          CMAKE_POLICY_VERSION_MINIMUM: "3.5"
       - name: Zip Windows build
         run: Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath offline-era-windows.zip
         shell: pwsh
